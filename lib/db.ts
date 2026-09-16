@@ -24,7 +24,7 @@ const DEFAULT_DEMO_ORDER: Order = {
   deliveryCode: "4829",
   isCodeVerified: false,
   estimatedTime: "15-20 min",
-  deliveryDuration: 60,
+  deliveryDuration: 2,
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 };
@@ -162,7 +162,7 @@ function mapRowToOrder(row: any): Order {
     deliveryCode: row.delivery_code,
     isCodeVerified: Boolean(row.is_code_verified),
     estimatedTime: row.estimated_time || (row.delivery_type === "RITIRO" ? "10-20 min" : "15-25 min"),
-    deliveryDuration: row.delivery_duration ? Number(row.delivery_duration) : 60,
+    deliveryDuration: row.delivery_duration ? Number(row.delivery_duration) : 2,
     deliveryStartedAt: row.delivery_started_at ? new Date(row.delivery_started_at).toISOString() : undefined,
     createdAt: new Date(row.created_at).toISOString(),
     updatedAt: new Date(row.updated_at).toISOString(),
@@ -196,7 +196,7 @@ export async function updateOrderStatus(
 ): Promise<Order | null> {
   const p = getPool();
   const isEnteringDelivery = newStatus === "IN_CONSEGNA";
-  const duration = Number(deliveryDuration) || 60;
+  const duration = Number(deliveryDuration) || 2;
 
   if (p) {
     try {
@@ -366,7 +366,7 @@ export async function createNewOrder(input?: CreateOrderInput): Promise<Order> {
     input?.estimatedTime?.trim() ||
     (deliveryType === "RITIRO" ? "10-20 min" : "15-25 min");
 
-  const deliveryDuration = Number(input?.deliveryDuration) || 60;
+  const deliveryDuration = Number(input?.deliveryDuration) || 2;
 
   const newOrder: Order = {
     id: "order-" + Date.now(),

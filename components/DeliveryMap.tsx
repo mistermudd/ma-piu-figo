@@ -79,8 +79,14 @@ function getPositionAtProgress(
 }
 
 export default function DeliveryMap({ order }: DeliveryMapProps) {
-  // Durata configurata (in secondi)
-  const durationSeconds = Math.max(10, order.deliveryDuration || 60);
+  // Durata configurata in MINUTI (se nel DB c'è un valore legacy > 30 lo converte)
+  const rawDuration = order.deliveryDuration;
+  const durationMinutes = rawDuration
+    ? rawDuration > 30
+      ? Math.max(1, Math.round(rawDuration / 60))
+      : rawDuration
+    : 2; // Default: 2 minuti
+  const durationSeconds = Math.max(30, durationMinutes * 60);
   const totalDistanceMeters = 1850;
 
   // Stato progresso 0..1
@@ -146,8 +152,18 @@ export default function DeliveryMap({ order }: DeliveryMapProps) {
     return getPositionAtProgress(ROUTE_POINTS, progress);
   }, [progress]);
 
-  // Calcoli telemetrici
+  // Formattazione tempo in minuti e secondi
   const remainingSeconds = Math.max(0, Math.round(durationSeconds * (1 - progress)));
+  const formatRemainingTime = (totalSecs: number) => {
+    const mins = Math.floor(totalSecs / 60);
+    const secs = totalSecs % 60;
+    if (mins > 0) {
+      return `${mins} min ${secs > 0 ? `${secs}s` : ""}`.trim();
+    }
+    return `${secs}s`;
+  };
+  const remainingTimeFormatted = progress >= 1 ? "Arrivato!" : formatRemainingTime(remainingSeconds);
+
   const remainingMeters = Math.max(0, Math.round(totalDistanceMeters * (1 - progress)));
   const percentComplete = Math.min(100, Math.round(progress * 100));
 
@@ -204,7 +220,7 @@ export default function DeliveryMap({ order }: DeliveryMapProps) {
             title="Riavvia la simulazione del percorso dall'inizio"
           >
             <RotateCcw className="w-3.5 h-3.5" />
-            <span>Riavvia Simulazione ({durationSeconds}s)</span>
+            <span>Riavvia Percorso ({durationMinutes} min)</span>
           </button>
         </div>
       </div>
@@ -216,7 +232,7 @@ export default function DeliveryMap({ order }: DeliveryMapProps) {
             Tempo Rimanente
           </span>
           <span className="text-base sm:text-lg font-black text-slate-900 font-mono">
-            {progress >= 1 ? "Arrivato!" : `${remainingSeconds}s`}
+            {remainingTimeFormatted}
           </span>
         </div>
 
@@ -436,7 +452,7 @@ export default function DeliveryMap({ order }: DeliveryMapProps) {
 
           {/* Etichetta fluttuante Rider Matteo */}
           <div className="absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap bg-[#00CDBC] text-slate-950 text-[10px] sm:text-xs font-black px-2.5 py-0.5 rounded-full shadow-lg border border-white">
-            Rider Matteo • {progress >= 1 ? "Arrivato!" : `${remainingSeconds}s`}
+            Rider Matteo • {remainingTimeFormatted}
           </div>
         </div>
 

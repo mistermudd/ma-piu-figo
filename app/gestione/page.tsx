@@ -55,7 +55,7 @@ export default function ManagementDashboardPage() {
   const [customerAddress, setCustomerAddress] = useState("");
   const [deliveryType, setDeliveryType] = useState<"DOMICILIO" | "RITIRO">("DOMICILIO");
   const [estimatedTime, setEstimatedTime] = useState<string>("15-20 min");
-  const [deliveryDuration, setDeliveryDuration] = useState<number>(60);
+  const [deliveryDuration, setDeliveryDuration] = useState<number>(2);
   const [customTimeInput, setCustomTimeInput] = useState<string>("");
   const [isUpdatingTime, setIsUpdatingTime] = useState(false);
   const [timeUpdatedBanner, setTimeUpdatedBanner] = useState<string | null>(null);
@@ -86,7 +86,11 @@ export default function ManagementDashboardPage() {
           setEstimatedTime(data.order.estimatedTime);
         }
         if (data.order.deliveryDuration) {
-          setDeliveryDuration(data.order.deliveryDuration);
+          const mins =
+            data.order.deliveryDuration > 30
+              ? Math.max(1, Math.round(data.order.deliveryDuration / 60))
+              : data.order.deliveryDuration;
+          setDeliveryDuration(mins);
         }
         if (data.order.items && data.order.items.length > 0) {
           setItems(data.order.items);
@@ -596,31 +600,33 @@ export default function ManagementDashboardPage() {
             <div>
               <label className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5 mb-1.5">
                 <Bike className="w-4 h-4 text-[#00CDBC]" />
-                Durata Viaggio Consegna Mappa GPS (Secondi)
+                Durata Viaggio Consegna Mappa GPS (Minuti)
               </label>
               <div className="flex flex-wrap items-center gap-2">
                 <div className="relative">
                   <input
                     type="number"
-                    min="10"
-                    max="600"
+                    min="1"
+                    max="60"
+                    step="1"
                     value={deliveryDuration}
                     onChange={(e) =>
-                      setDeliveryDuration(Math.max(10, parseInt(e.target.value) || 60))
+                      setDeliveryDuration(Math.max(1, parseInt(e.target.value) || 2))
                     }
-                    className="w-28 px-3 py-2 text-sm rounded-xl border border-slate-300 focus:border-[#00CDBC] focus:ring-2 focus:ring-[#00CDBC]/20 outline-none transition-all font-semibold font-mono text-center"
+                    className="w-24 px-3 py-2 text-sm rounded-xl border border-slate-300 focus:border-[#00CDBC] focus:ring-2 focus:ring-[#00CDBC]/20 outline-none transition-all font-semibold font-mono text-center"
                   />
-                  <span className="absolute right-2.5 top-2.5 text-xs text-slate-400 font-bold">
-                    sec
+                  <span className="absolute right-2 top-2.5 text-xs text-slate-400 font-bold">
+                    min
                   </span>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {[
-                    { label: "30s (Veloce)", val: 30 },
-                    { label: "45s", val: 45 },
-                    { label: "60s (1 min)", val: 60 },
-                    { label: "90s (1.5 min)", val: 90 },
-                    { label: "120s (2 min)", val: 120 },
+                    { label: "1 min", val: 1 },
+                    { label: "2 min", val: 2 },
+                    { label: "3 min", val: 3 },
+                    { label: "5 min", val: 5 },
+                    { label: "10 min", val: 10 },
+                    { label: "15 min", val: 15 },
                   ].map((preset) => (
                     <button
                       key={preset.val}
@@ -638,7 +644,7 @@ export default function ManagementDashboardPage() {
                 </div>
               </div>
               <p className="text-[11px] text-slate-500 mt-1">
-                Tempo impiegato dal rider (con la tua foto) per percorrere la strada sulla mappa prima di arrivare.
+                Tempo in minuti impiegato dal rider (con la tua foto) per percorrere la strada sulla mappa prima di arrivare a casa del cliente.
               </p>
             </div>
           )}
@@ -826,20 +832,21 @@ export default function ManagementDashboardPage() {
                 <div>
                   <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5 uppercase tracking-wider">
                     <Bike className="w-4 h-4 text-[#00CDBC]" />
-                    Durata Simulazione Tragitto Rider su Mappa
+                    Durata Simulazione Tragitto Rider su Mappa (Minuti)
                   </label>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    Definisci quanti secondi impiegherà il rider (con la tua foto) a percorrere la strada sulla mappa prima di arrivare.
+                    Definisci quanti minuti impiegherà il rider (con la tua foto) a percorrere la strada sulla mappa prima di arrivare.
                   </p>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-1.5">
                   {[
-                    { label: "30s", val: 30 },
-                    { label: "45s", val: 45 },
-                    { label: "60s (1m)", val: 60 },
-                    { label: "90s", val: 90 },
-                    { label: "120s (2m)", val: 120 },
+                    { label: "1 min", val: 1 },
+                    { label: "2 min", val: 2 },
+                    { label: "3 min", val: 3 },
+                    { label: "5 min", val: 5 },
+                    { label: "10 min", val: 10 },
+                    { label: "15 min", val: 15 },
                   ].map((preset) => (
                     <button
                       key={preset.val}
@@ -858,16 +865,17 @@ export default function ManagementDashboardPage() {
                   <div className="relative w-24">
                     <input
                       type="number"
-                      min="10"
-                      max="600"
+                      min="1"
+                      max="60"
+                      step="1"
                       value={deliveryDuration}
                       onChange={(e) =>
-                        setDeliveryDuration(Math.max(10, parseInt(e.target.value) || 60))
+                        setDeliveryDuration(Math.max(1, parseInt(e.target.value) || 2))
                       }
                       className="w-full px-2.5 py-1.5 text-xs text-center rounded-xl border border-slate-300 bg-white font-mono font-bold outline-none focus:border-[#00CDBC]"
                     />
                     <span className="absolute right-2 top-1.5 text-[10px] text-slate-400 font-bold">
-                      s
+                      min
                     </span>
                   </div>
                 </div>
@@ -877,7 +885,7 @@ export default function ManagementDashboardPage() {
                 <div className="mt-3 pt-3 border-t border-teal-200/60 flex flex-wrap items-center justify-between gap-2">
                   <span className="text-xs text-[#007E7A] font-semibold flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-                    Ordine in consegna (durata attiva: {order.deliveryDuration || deliveryDuration}s)
+                    Ordine in consegna (durata attiva: {order.deliveryDuration && order.deliveryDuration > 30 ? Math.round(order.deliveryDuration / 60) : (order.deliveryDuration || deliveryDuration)} min)
                   </span>
                   <button
                     type="button"
@@ -886,7 +894,7 @@ export default function ManagementDashboardPage() {
                     className="flex items-center gap-1.5 text-xs font-bold text-white bg-[#00CDBC] hover:bg-[#007E7A] px-3.5 py-1.5 rounded-xl shadow-xs transition-all active:scale-95 disabled:opacity-50"
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
-                    <span>Riavvia tragitto ({deliveryDuration}s)</span>
+                    <span>Riavvia tragitto ({deliveryDuration} min)</span>
                   </button>
                 </div>
               )}
@@ -946,7 +954,7 @@ export default function ManagementDashboardPage() {
               ) : (
                 <>
                   <Bike className="w-5 h-5" />
-                  <span>3. Metti in Consegna ({deliveryDuration}s)</span>
+                  <span>3. Metti in Consegna ({deliveryDuration} min)</span>
                 </>
               )}
             </button>
