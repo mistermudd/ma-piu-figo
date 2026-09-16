@@ -127,8 +127,8 @@ export default function CustomerOrderPage() {
           <Database className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
           <div className="flex-1">
             <span className="font-semibold">Modalità Dimostrativa Attiva:</span>{" "}
-            Stai testando l'app in locale. Per collegare il tuo database Neon PostgreSQL definitivo,
-            imposta la stringa <code className="bg-amber-100 px-1.5 py-0.5 rounded font-mono text-xs">DATABASE_URL</code> nel file <code className="bg-amber-100 px-1.5 py-0.5 rounded font-mono text-xs">.env.local</code>. Le modifiche di stato funzionano istantaneamente in entrambe le modalità!
+            Il database Neon PostgreSQL non è ancora collegato o raggiungibile.
+            Assicurati che la variabile <code className="bg-amber-100 px-1.5 py-0.5 rounded font-mono text-xs">DATABASE_URL</code> sia configurata nelle impostazioni Environment di Render o nel file <code className="bg-amber-100 px-1.5 py-0.5 rounded font-mono text-xs">.env.local</code>. Le modifiche di stato funzionano comunque istantaneamente in entrambe le modalità!
           </div>
         </div>
       )}

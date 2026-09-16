@@ -10,4 +10,4 @@ services:
       - key: NODE_VERSION
         value: 20.18.0
       - key: DATABASE_URL
-        sync: false
+        value: postgresql://neondb_owner:npg_6kRgXI7JeEvp@ep-bold-lab-b4qsw46x-pooler.c-6.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require
