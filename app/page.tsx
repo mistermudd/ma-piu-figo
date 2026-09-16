@@ -1,0 +1,430 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { Order, OrderStatus, ORDER_STEPS } from "@/lib/types";
+import {
+  Clock,
+  CheckCircle2,
+  ChefHat,
+  Bike,
+  PartyPopper,
+  MapPin,
+  Store,
+  Receipt,
+  Copy,
+  Check,
+  ArrowRight,
+  RefreshCw,
+  KeyRound,
+  ShieldCheck,
+  AlertCircle,
+  Database,
+} from "lucide-react";
+
+export default function CustomerOrderPage() {
+  const [order, setOrder] = useState<Order | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [copied, setCopied] = useState(false);
+  const [isDbConnected, setIsDbConnected] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Caricamento dati ordine con polling ogni 2 secondi per aggiornamenti in tempo reale
+  const fetchOrder = async (showSpinner = false) => {
+    if (showSpinner) setIsRefreshing(true);
+    try {
+      const res = await fetch("/api/order", { cache: "no-store" });
+      const data = await res.json();
+      if (data.order) {
+        setOrder(data.order);
+        setIsDbConnected(data.isDatabaseConnected);
+      }
+    } catch (err) {
+      console.error("Errore recupero ordine:", err);
+    } finally {
+      setIsLoading(false);
+      if (showSpinner) setIsRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchOrder();
+    const interval = setInterval(() => {
+      fetchOrder();
+    }, 2000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const copyCode = () => {
+    if (!order?.deliveryCode) return;
+    navigator.clipboard.writeText(order.deliveryCode);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  if (isLoading && !order) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+        <div className="w-12 h-12 border-4 border-[#00CDBC]/30 border-t-[#00CDBC] rounded-full animate-spin" />
+        <p className="text-slate-600 font-medium text-sm animate-pulse">
+          Caricamento dettagli ordine in corso...
+        </p>
+      </div>
+    );
+  }
+
+  const currentStepIndex = ORDER_STEPS.findIndex(
+    (step) => step.status === order?.status
+  );
+
+  const getStepIcon = (status: OrderStatus, index: number) => {
+    const isCompleted = index < currentStepIndex;
+    const isCurrent = index === currentStepIndex;
+
+    const iconProps = {
+      className: `w-5 h-5 ${
+        isCurrent
+          ? "text-white animate-bounce"
+          : isCompleted
+          ? "text-white"
+          : "text-slate-400"
+      }`,
+    };
+
+    switch (status) {
+      case "RICEVUTO":
+        return <Clock {...iconProps} />;
+      case "ACCETTATO":
+        return <CheckCircle2 {...iconProps} />;
+      case "IN_PREPARAZIONE":
+        return <ChefHat {...iconProps} />;
+      case "IN_CONSEGNA":
+        return <Bike {...iconProps} />;
+      case "CONSEGNATO":
+        return <PartyPopper {...iconProps} />;
+    }
+  };
+
+  return (
+    <div className="space-y-8 max-w-4xl mx-auto">
+      {/* Banner per Neon Database */}
+      {!isDbConnected && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 rounded-2xl flex items-start gap-3 text-xs sm:text-sm shadow-sm">
+          <Database className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <span className="font-semibold">Modalità Dimostrativa Attiva:</span>{" "}
+            Stai testando l'app in locale. Per collegare il tuo database Neon PostgreSQL definitivo,
+            imposta la stringa <code className="bg-amber-100 px-1.5 py-0.5 rounded font-mono text-xs">DATABASE_URL</code> nel file <code className="bg-amber-100 px-1.5 py-0.5 rounded font-mono text-xs">.env.local</code>. Le modifiche di stato funzionano istantaneamente in entrambe le modalità!
+          </div>
+        </div>
+      )}
+
+      {/* Intestazione Ordine */}
+      <div className="bg-white border border-slate-200/80 rounded-3xl p-6 sm:p-8 shadow-sm flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2.5">
+            <span className="bg-[#00CDBC]/10 text-[#007E7A] text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+              Pagina 1 • Vista Cliente
+            </span>
+            <span className="text-xs text-slate-500 font-mono">
+              #{order?.orderNumber}
+            </span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-2">
+            Stato dell&apos;Ordine
+          </h1>
+          <p className="text-slate-600 text-sm mt-1">
+            Questa pagina si aggiorna <strong className="text-slate-900">in tempo reale</strong> quando la cucina o il rider modificano lo stato dalla dashboard.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3 self-start md:self-auto">
+          <button
+            onClick={() => fetchOrder(true)}
+            disabled={isRefreshing}
+            className="flex items-center gap-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 px-3 py-2 rounded-xl transition-colors active:scale-95 disabled:opacity-50"
+            title="Aggiorna manualmente"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin text-[#00CDBC]" : ""}`} />
+            <span>Sincronizzato</span>
+          </button>
+          <Link
+            href="/gestione"
+            className="flex items-center gap-2 text-xs sm:text-sm font-semibold text-white bg-[#00CDBC] hover:bg-[#00B8A9] px-4 py-2.5 rounded-xl shadow-md shadow-[#00CDBC]/20 transition-all active:scale-95"
+          >
+            <span>Apri Dashboard Gestione</span>
+            <ArrowRight className="w-4 h-4" />
+          </Link>
+        </div>
+      </div>
+
+      {/* Sezione Avanzamento Ordine (Stepper Progressivo) */}
+      <div className="bg-white border border-slate-200/80 rounded-3xl p-6 sm:p-8 shadow-sm">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+            <Clock className="w-5 h-5 text-[#00CDBC]" />
+            Avanzamento Ordine
+          </h2>
+          <span className="text-xs font-semibold px-3 py-1 rounded-full bg-slate-100 text-slate-700">
+            Fase {currentStepIndex + 1} di {ORDER_STEPS.length}
+          </span>
+        </div>
+
+        {/* Barra di avanzamento grafica */}
+        <div className="relative mb-10 mt-4">
+          <div className="absolute top-1/2 left-0 right-0 -translate-y-1/2 h-2 bg-slate-100 rounded-full z-0" />
+          <div
+            className="absolute top-1/2 left-0 -translate-y-1/2 h-2 bg-[#00CDBC] rounded-full z-0 transition-all duration-700 ease-out"
+            style={{
+              width: `${(currentStepIndex / (ORDER_STEPS.length - 1)) * 100}%`,
+            }}
+          />
+
+          <div className="relative z-10 flex justify-between">
+            {ORDER_STEPS.map((step, idx) => {
+              const isCompleted = idx < currentStepIndex;
+              const isCurrent = idx === currentStepIndex;
+
+              return (
+                <div
+                  key={step.status}
+                  className="flex flex-col items-center text-center group"
+                >
+                  <div
+                    className={`w-10 h-10 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center transition-all duration-300 ${
+                      isCurrent
+                        ? "bg-[#00CDBC] text-white ring-4 ring-[#00CDBC]/25 shadow-lg scale-110"
+                        : isCompleted
+                        ? "bg-[#00CDBC] text-white shadow-sm"
+                        : "bg-white border-2 border-slate-200 text-slate-400"
+                    }`}
+                  >
+                    {getStepIcon(step.status, idx)}
+                  </div>
+                  <span
+                    className={`mt-3 text-xs sm:text-sm font-semibold max-w-[80px] sm:max-w-[100px] leading-tight ${
+                      isCurrent
+                        ? "text-[#007E7A] font-bold"
+                        : isCompleted
+                        ? "text-slate-800"
+                        : "text-slate-400"
+                    }`}
+                  >
+                    {step.title}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Stato Corrente in Evidenza */}
+        <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div>
+            <div className="text-xs uppercase font-bold text-[#007E7A] tracking-wider mb-1">
+              Stato Attuale
+            </div>
+            <div className="text-lg sm:text-xl font-black text-slate-900">
+              {ORDER_STEPS[currentStepIndex]?.title}
+            </div>
+            <p className="text-xs sm:text-sm text-slate-600 mt-0.5">
+              {ORDER_STEPS[currentStepIndex]?.description}
+            </p>
+          </div>
+
+          <div className="shrink-0 bg-white border border-slate-200 px-4 py-2 rounded-xl text-center shadow-xs">
+            <span className="text-[11px] font-medium text-slate-500 block">
+              Tempo stimato
+            </span>
+            <span className="text-sm font-extrabold text-slate-800">
+              {order?.status === "CONSEGNATO" ? "Completato" : "15-25 min"}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* SEZIONE: CODICE PER LA CONSEGNA */}
+      <div className="bg-white border border-slate-200/80 rounded-3xl p-6 sm:p-8 shadow-sm">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-2xl bg-teal-50 text-[#007E7A] flex items-center justify-center">
+            <KeyRound className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="text-lg font-bold text-slate-900">
+              Numero per la Consegna (Codice di Sicurezza)
+            </h3>
+            <p className="text-xs text-slate-500">
+              Codice di verifica univoco per confermare che stai ritirando il tuo ordine
+            </p>
+          </div>
+        </div>
+
+        {/* CASO 1: Ordine in consegna -> CODICE VISIBILE CON EVIDENZA */}
+        {order?.status === "IN_CONSEGNA" ? (
+          <div className="bg-gradient-to-br from-teal-500 via-[#00CDBC] to-emerald-600 text-white rounded-3xl p-6 sm:p-8 shadow-xl pulse-glow relative overflow-hidden">
+            <div className="absolute top-0 right-0 -mr-8 -mt-8 w-40 h-40 bg-white/10 rounded-full blur-2xl pointer-events-none" />
+            <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
+              <div className="text-center md:text-left space-y-2">
+                <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-md px-3.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider text-white">
+                  <ShieldCheck className="w-4 h-4" />
+                  Rider in arrivo • Mostra questo codice
+                </div>
+                <h4 className="text-xl sm:text-2xl font-black text-white">
+                  Il tuo codice di consegna è pronto!
+                </h4>
+                <p className="text-teal-50 text-xs sm:text-sm max-w-md">
+                  Comunica a voce o mostra questo codice di 4 cifre al rider quando citofona. Il rider lo inserirà nella sua applicazione per concludere la consegna.
+                </p>
+              </div>
+
+              {/* Box Codice Digitale */}
+              <div className="flex flex-col items-center gap-3">
+                <div className="flex items-center gap-2 sm:gap-3 bg-slate-950/40 backdrop-blur-md p-3 sm:p-4 rounded-2xl border border-white/20 shadow-2xl">
+                  {order.deliveryCode.split("").map((digit, i) => (
+                    <span
+                      key={i}
+                      className="w-12 h-14 sm:w-14 sm:h-16 bg-white text-slate-900 text-2xl sm:text-3xl font-black rounded-xl flex items-center justify-center shadow-inner tracking-widest"
+                    >
+                      {digit}
+                    </span>
+                  ))}
+                </div>
+
+                <button
+                  onClick={copyCode}
+                  className="flex items-center gap-1.5 text-xs font-semibold bg-white/20 hover:bg-white/30 text-white px-3.5 py-1.5 rounded-full transition-all active:scale-95"
+                >
+                  {copied ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-emerald-300" />
+                      <span>Copiato negli appunti!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Copia codice</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : order?.status === "CONSEGNATO" ? (
+          /* CASO 2: Ordine Consegnato */
+          <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-2xl p-5 flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+              <CheckCircle2 className="w-6 h-6" />
+            </div>
+            <div>
+              <h4 className="font-bold text-base">Codice Verificato & Consegna Completata!</h4>
+              <p className="text-xs sm:text-sm text-emerald-800 mt-0.5">
+                Il codice <span className="font-mono font-bold">{order?.deliveryCode}</span> è stato convalidato dal rider con successo. Speriamo che il pasto sia di tuo gradimento!
+              </p>
+            </div>
+          </div>
+        ) : (
+          /* CASO 3: Ordine non ancora in consegna */
+          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 flex items-start sm:items-center gap-3.5 text-slate-600">
+            <AlertCircle className="w-5 h-5 text-slate-400 shrink-0 mt-0.5 sm:mt-0" />
+            <div className="text-xs sm:text-sm">
+              <span className="font-semibold text-slate-800">
+                Il codice di sicurezza comparirà qui non appena l&apos;ordine sarà contrassegnato come &quot;In Consegna&quot;.
+              </span>{" "}
+              Attualmente il ristorante sta gestendo la comanda.
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Dettagli Consegna e Articoli */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Scheda Destinazione e Ristorante */}
+        <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm space-y-6">
+          <div>
+            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2 mb-3">
+              <MapPin className="w-4 h-4 text-[#00CDBC]" />
+              Dati di Consegna
+            </h3>
+            <div className="bg-slate-50 border border-slate-200/60 rounded-2xl p-4 space-y-2">
+              <div>
+                <span className="text-[11px] font-semibold uppercase text-slate-400 block">
+                  Destinatario
+                </span>
+                <span className="text-sm font-bold text-slate-800">
+                  {order?.customerName}
+                </span>
+              </div>
+              <div>
+                <span className="text-[11px] font-semibold uppercase text-slate-400 block">
+                  Indirizzo
+                </span>
+                <span className="text-sm text-slate-700">
+                  {order?.customerAddress}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2 mb-3">
+              <Store className="w-4 h-4 text-[#00CDBC]" />
+              Ristorante Partner
+            </h3>
+            <div className="bg-slate-50 border border-slate-200/60 rounded-2xl p-4">
+              <div className="text-sm font-bold text-slate-800">
+                {order?.restaurantName}
+              </div>
+              <div className="text-xs text-slate-500 mt-0.5">
+                Cucina Italiana • Pizze al forno a legna • Hamburger Gourmet
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Scheda Riepilogo Piatti Ordinati */}
+        <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm flex flex-col justify-between">
+          <div>
+            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2 mb-4">
+              <Receipt className="w-4 h-4 text-[#00CDBC]" />
+              Riepilogo Piatti ({order?.items.length})
+            </h3>
+
+            <div className="divide-y divide-slate-100">
+              {order?.items.map((item) => (
+                <div
+                  key={item.id}
+                  className="py-3 flex items-center justify-between text-sm"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="w-6 h-6 rounded-md bg-[#00CDBC]/15 text-[#007E7A] font-bold text-xs flex items-center justify-center">
+                      {item.quantity}x
+                    </span>
+                    <span className="font-medium text-slate-800">
+                      {item.name}
+                    </span>
+                  </div>
+                  <span className="font-semibold text-slate-700">
+                    {(item.price * item.quantity).toFixed(2)} €
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="border-t border-slate-200 pt-4 mt-6">
+            <div className="flex justify-between items-center text-xs text-slate-500 mb-1">
+              <span>Spese di consegna</span>
+              <span className="font-medium text-emerald-600">Gratis</span>
+            </div>
+            <div className="flex justify-between items-center text-base font-extrabold text-slate-900">
+              <span>Totale Ordine</span>
+              <span className="text-xl text-[#007E7A]">
+                {order?.totalAmount.toFixed(2)} €
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
