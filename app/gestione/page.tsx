@@ -56,6 +56,7 @@ export default function ManagementDashboardPage() {
   const [deliveryType, setDeliveryType] = useState<"DOMICILIO" | "RITIRO">("DOMICILIO");
   const [estimatedTime, setEstimatedTime] = useState<string>("15-20 min");
   const [deliveryDuration, setDeliveryDuration] = useState<number>(2);
+  const [deliveryDistance, setDeliveryDistance] = useState<number>(2.0);
   const [customTimeInput, setCustomTimeInput] = useState<string>("");
   const [isUpdatingTime, setIsUpdatingTime] = useState(false);
   const [timeUpdatedBanner, setTimeUpdatedBanner] = useState<string | null>(null);
@@ -91,6 +92,9 @@ export default function ManagementDashboardPage() {
               ? Math.max(1, Math.round(data.order.deliveryDuration / 60))
               : data.order.deliveryDuration;
           setDeliveryDuration(mins);
+        }
+        if (data.order.deliveryDistance) {
+          setDeliveryDistance(Number(data.order.deliveryDistance));
         }
         if (data.order.items && data.order.items.length > 0) {
           setItems(data.order.items);
@@ -191,6 +195,7 @@ export default function ManagementDashboardPage() {
           deliveryType,
           estimatedTime,
           deliveryDuration,
+          deliveryDistance,
           items: validItems.map((it) => ({
             id: it.id,
             name: it.name.trim(),
@@ -283,11 +288,12 @@ export default function ManagementDashboardPage() {
     }
   };
 
-  // Aggiornamento stato ordine (con tempo stimato e durata consegna associati)
+  // Aggiornamento stato ordine (con tempo stimato, durata e distanza associate)
   const updateStatus = async (
     newStatus: OrderStatus,
     customTime?: string,
-    customDeliveryDuration?: number
+    customDeliveryDuration?: number,
+    customDeliveryDistance?: number
   ) => {
     if (!order) return;
     setIsUpdating(true);
@@ -297,6 +303,8 @@ export default function ManagementDashboardPage() {
     const timeToApply = customTime || estimatedTime;
     const durationToApply =
       customDeliveryDuration !== undefined ? customDeliveryDuration : deliveryDuration;
+    const distanceToApply =
+      customDeliveryDistance !== undefined ? customDeliveryDistance : deliveryDistance;
 
     try {
       const res = await fetch("/api/order/status", {
@@ -307,6 +315,7 @@ export default function ManagementDashboardPage() {
           status: newStatus,
           estimatedTime: timeToApply,
           deliveryDuration: durationToApply,
+          deliveryDistance: distanceToApply,
         }),
       });
 
@@ -330,7 +339,15 @@ export default function ManagementDashboardPage() {
   const handleSelectDeliveryDuration = async (newMins: number) => {
     setDeliveryDuration(newMins);
     if (order?.status === "IN_CONSEGNA") {
-      await updateStatus("IN_CONSEGNA", undefined, newMins);
+      await updateStatus("IN_CONSEGNA", undefined, newMins, deliveryDistance);
+    }
+  };
+
+  // Modifica distanza stimata del tragitto sulla mappa
+  const handleSelectDeliveryDistance = async (newKm: number) => {
+    setDeliveryDistance(newKm);
+    if (order) {
+      await updateStatus(order.status, undefined, deliveryDuration, newKm);
     }
   };
 
@@ -603,57 +620,111 @@ export default function ManagementDashboardPage() {
             </div>
           </div>
 
-          {/* Durata Simulazione Tragitto Consegna Mappa (per consegna a domicilio) */}
+          {/* Durata e Distanza Simulazione Tragitto Consegna Mappa (per consegna a domicilio) */}
           {deliveryType === "DOMICILIO" && (
-            <div>
-              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5 mb-1.5">
-                <Bike className="w-4 h-4 text-[#00CDBC]" />
-                Durata Viaggio Consegna Mappa GPS (Minuti)
-              </label>
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="relative">
-                  <input
-                    type="number"
-                    min="1"
-                    max="60"
-                    step="1"
-                    value={deliveryDuration}
-                    onChange={(e) =>
-                      setDeliveryDuration(Math.max(1, parseInt(e.target.value) || 2))
-                    }
-                    className="w-24 px-3 py-2 text-sm rounded-xl border border-slate-300 focus:border-[#00CDBC] focus:ring-2 focus:ring-[#00CDBC]/20 outline-none transition-all font-semibold font-mono text-center"
-                  />
-                  <span className="absolute right-2 top-2.5 text-xs text-slate-400 font-bold">
-                    min
-                  </span>
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5 mb-1.5">
+                  <Bike className="w-4 h-4 text-[#00CDBC]" />
+                  Durata Viaggio Consegna Mappa GPS (Minuti)
+                </label>
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min="1"
+                      max="60"
+                      step="1"
+                      value={deliveryDuration}
+                      onChange={(e) =>
+                        setDeliveryDuration(Math.max(1, parseInt(e.target.value) || 2))
+                      }
+                      className="w-24 px-3 py-2 text-sm rounded-xl border border-slate-300 focus:border-[#00CDBC] focus:ring-2 focus:ring-[#00CDBC]/20 outline-none transition-all font-semibold font-mono text-center"
+                    />
+                    <span className="absolute right-2 top-2.5 text-xs text-slate-400 font-bold">
+                      min
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      { label: "1 min", val: 1 },
+                      { label: "2 min", val: 2 },
+                      { label: "3 min", val: 3 },
+                      { label: "5 min", val: 5 },
+                      { label: "10 min", val: 10 },
+                      { label: "15 min", val: 15 },
+                    ].map((preset) => (
+                      <button
+                        key={preset.val}
+                        type="button"
+                        onClick={() => setDeliveryDuration(preset.val)}
+                        className={`px-3 py-2 rounded-xl text-xs font-bold transition-all border ${
+                          deliveryDuration === preset.val
+                            ? "bg-[#00CDBC] text-white border-[#00CDBC] shadow-xs"
+                            : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {[
-                    { label: "1 min", val: 1 },
-                    { label: "2 min", val: 2 },
-                    { label: "3 min", val: 3 },
-                    { label: "5 min", val: 5 },
-                    { label: "10 min", val: 10 },
-                    { label: "15 min", val: 15 },
-                  ].map((preset) => (
-                    <button
-                      key={preset.val}
-                      type="button"
-                      onClick={() => setDeliveryDuration(preset.val)}
-                      className={`px-3 py-2 rounded-xl text-xs font-bold transition-all border ${
-                        deliveryDuration === preset.val
-                          ? "bg-[#00CDBC] text-white border-[#00CDBC] shadow-xs"
-                          : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
-                      }`}
-                    >
-                      {preset.label}
-                    </button>
-                  ))}
-                </div>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Tempo in minuti impiegato dal rider (con la tua foto) per percorrere la strada sulla mappa prima di arrivare a casa del cliente.
+                </p>
               </div>
-              <p className="text-[11px] text-slate-500 mt-1">
-                Tempo in minuti impiegato dal rider (con la tua foto) per percorrere la strada sulla mappa prima di arrivare a casa del cliente.
-              </p>
+
+              {/* Distanza Stimata Consegna (km) */}
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5 mb-1.5">
+                  <MapPin className="w-4 h-4 text-[#00CDBC]" />
+                  Distanza Stimata Consegna (Chilometri)
+                </label>
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min="0.1"
+                      max="50"
+                      step="0.1"
+                      value={deliveryDistance}
+                      onChange={(e) =>
+                        setDeliveryDistance(Math.max(0.1, parseFloat(e.target.value) || 2.0))
+                      }
+                      className="w-24 px-3 py-2 text-sm rounded-xl border border-slate-300 focus:border-[#00CDBC] focus:ring-2 focus:ring-[#00CDBC]/20 outline-none transition-all font-semibold font-mono text-center"
+                    />
+                    <span className="absolute right-2 top-2.5 text-xs text-slate-400 font-bold">
+                      km
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      { label: "1.0 km", val: 1.0 },
+                      { label: "1.5 km", val: 1.5 },
+                      { label: "2.0 km", val: 2.0 },
+                      { label: "2.5 km", val: 2.5 },
+                      { label: "3.5 km", val: 3.5 },
+                      { label: "5.0 km", val: 5.0 },
+                    ].map((preset) => (
+                      <button
+                        key={preset.val}
+                        type="button"
+                        onClick={() => setDeliveryDistance(preset.val)}
+                        className={`px-3 py-2 rounded-xl text-xs font-bold transition-all border ${
+                          deliveryDistance === preset.val
+                            ? "bg-[#00CDBC] text-white border-[#00CDBC] shadow-xs"
+                            : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Distanza effettiva dal tuo locale a casa del cliente. Comparirà nella telemetria della mappa in tempo reale.
+                </p>
+              </div>
             </div>
           )}
 
@@ -906,11 +977,80 @@ export default function ManagementDashboardPage() {
                 </div>
               </div>
 
+              {/* 2. DISTANZA STIMATA DEL TRAGITTO */}
+              <div className="mt-3 pt-3 border-t border-teal-200/50 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5 uppercase tracking-wider">
+                    <MapPin className="w-4 h-4 text-[#00CDBC]" />
+                    Distanza Stimata del Percorso (Chilometri)
+                  </label>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Imposta la distanza dal locale al cliente. Si aggiorna in tempo reale nella telemetria della mappa.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {[
+                    { label: "1.0 km", val: 1.0 },
+                    { label: "1.5 km", val: 1.5 },
+                    { label: "2.0 km", val: 2.0 },
+                    { label: "2.5 km", val: 2.5 },
+                    { label: "3.5 km", val: 3.5 },
+                    { label: "5.0 km", val: 5.0 },
+                  ].map((preset) => (
+                    <button
+                      key={preset.val}
+                      type="button"
+                      onClick={() => handleSelectDeliveryDistance(preset.val)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
+                        deliveryDistance === preset.val
+                          ? "bg-[#00CDBC] text-white border-[#00CDBC] shadow-xs scale-105"
+                          : "bg-white border-slate-200 text-slate-700 hover:bg-slate-100"
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+
+                  <div className="relative w-24">
+                    <input
+                      type="number"
+                      min="0.1"
+                      max="50"
+                      step="0.1"
+                      value={deliveryDistance}
+                      onChange={(e) =>
+                        setDeliveryDistance(Math.max(0.1, parseFloat(e.target.value) || 2.0))
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          handleSelectDeliveryDistance(deliveryDistance);
+                        }
+                      }}
+                      className="w-full px-2.5 py-1.5 text-xs text-center rounded-xl border border-slate-300 bg-white font-mono font-bold outline-none focus:border-[#00CDBC]"
+                    />
+                    <span className="absolute right-2 top-1.5 text-[10px] text-slate-400 font-bold">
+                      km
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={isUpdating}
+                    onClick={() => handleSelectDeliveryDistance(deliveryDistance)}
+                    className="text-xs font-bold text-[#007E7A] bg-teal-50 hover:bg-teal-100 px-3 py-1.5 rounded-xl border border-teal-200 transition-all active:scale-95 disabled:opacity-50"
+                    title="Salva la distanza inserita"
+                  >
+                    Applica
+                  </button>
+                </div>
+              </div>
+
               {order?.status === "IN_CONSEGNA" && (
                 <div className="mt-3 pt-3 border-t border-teal-200/60 flex flex-wrap items-center justify-between gap-2">
                   <span className="text-xs text-[#007E7A] font-semibold flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-                    Ordine in consegna (durata: {order.deliveryDuration && order.deliveryDuration > 30 ? Math.round(order.deliveryDuration / 60) : (order.deliveryDuration || deliveryDuration)} min)
+                    Ordine in consegna: durata {order.deliveryDuration && order.deliveryDuration > 30 ? Math.round(order.deliveryDuration / 60) : (order.deliveryDuration || deliveryDuration)} min • distanza {order.deliveryDistance ? Number(order.deliveryDistance).toFixed(1) : deliveryDistance.toFixed(1)} km
                     <span className="hidden md:inline text-[11px] text-teal-600 font-normal">
                       • Riavviabile solo da qui modificando il tempo
                     </span>
@@ -966,7 +1106,7 @@ export default function ManagementDashboardPage() {
 
             {/* 3. Pulsante "Ordine in Consegna o Pronto per il Ritiro" */}
             <button
-              onClick={() => updateStatus("IN_CONSEGNA", undefined, deliveryDuration)}
+              onClick={() => updateStatus("IN_CONSEGNA", undefined, deliveryDuration, deliveryDistance)}
               disabled={isUpdating}
               className={`flex items-center justify-center gap-2.5 p-4 rounded-2xl font-bold text-sm transition-all active:scale-98 ${
                 order?.status === "IN_CONSEGNA"
@@ -982,7 +1122,7 @@ export default function ManagementDashboardPage() {
               ) : (
                 <>
                   <Bike className="w-5 h-5" />
-                  <span>3. Metti in Consegna ({deliveryDuration} min)</span>
+                  <span>3. Metti in Consegna ({deliveryDuration} min • {deliveryDistance.toFixed(1)} km)</span>
                 </>
               )}
             </button>

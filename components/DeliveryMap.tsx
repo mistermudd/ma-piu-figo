@@ -5,6 +5,7 @@ import { Order } from "@/lib/types";
 import {
   Navigation,
   Clock,
+  MapPin,
   CheckCircle2,
   Building2,
   Home,
@@ -87,7 +88,13 @@ export default function DeliveryMap({ order }: DeliveryMapProps) {
       : rawDuration
     : 2; // Default: 2 minuti
   const durationSeconds = Math.max(30, durationMinutes * 60);
-  const totalDistanceMeters = 1850;
+
+  // Distanza stimata impostata dalla gestione (default: 2.0 km)
+  const distanceKm = order.deliveryDistance ? Number(order.deliveryDistance) : 2.0;
+  const totalDistanceMeters = Math.max(100, Math.round(distanceKm * 1000));
+
+  // Velocità media calcolata dinamicamente in base a distanza e minuti
+  const avgSpeedKmh = Math.max(12, Math.min(45, Math.round(distanceKm / (durationMinutes / 60))));
 
   // Stato progresso 0..1
   const [progress, setProgress] = useState(0);
@@ -149,7 +156,17 @@ export default function DeliveryMap({ order }: DeliveryMapProps) {
   };
   const remainingTimeFormatted = progress >= 1 ? "Arrivato!" : formatRemainingMinutes(remainingSeconds);
 
+  // Formattazione distanza rimanente dinamica (km se >= 1000m, metri se < 1000m)
   const remainingMeters = Math.max(0, Math.round(totalDistanceMeters * (1 - progress)));
+  const formatDistance = (meters: number) => {
+    if (meters <= 0) return "0 m";
+    if (meters >= 1000) {
+      return `${(meters / 1000).toFixed(1)} km`;
+    }
+    return `${meters} m`;
+  };
+  const remainingDistanceFormatted = progress >= 1 ? "0 m" : formatDistance(remainingMeters);
+
   const percentComplete = Math.min(100, Math.round(progress * 100));
 
   // Testo di stato del tragitto
@@ -197,11 +214,15 @@ export default function DeliveryMap({ order }: DeliveryMapProps) {
           </p>
         </div>
 
-        {/* Badge Informativo Tempo Tragitto Impostato dalla Gestione */}
-        <div className="flex items-center gap-3">
+        {/* Badge Informativi Tempo e Distanza Tragitto Impostati dalla Gestione */}
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <div className="flex items-center gap-2 bg-white/10 px-3.5 py-2 rounded-xl border border-white/10 text-xs font-semibold text-teal-200">
             <Clock className="w-3.5 h-3.5 text-[#00CDBC]" />
             <span>Tragitto: {durationMinutes} min</span>
+          </div>
+          <div className="flex items-center gap-2 bg-white/10 px-3.5 py-2 rounded-xl border border-white/10 text-xs font-semibold text-teal-200">
+            <MapPin className="w-3.5 h-3.5 text-[#00CDBC]" />
+            <span>Distanza: {distanceKm.toFixed(1)} km</span>
           </div>
         </div>
       </div>
@@ -222,7 +243,7 @@ export default function DeliveryMap({ order }: DeliveryMapProps) {
             Distanza Stimata
           </span>
           <span className="text-base sm:text-lg font-black text-[#007E7A] font-mono">
-            {progress >= 1 ? "0 m" : `${remainingMeters} m`}
+            {remainingDistanceFormatted}
           </span>
         </div>
 
@@ -231,7 +252,7 @@ export default function DeliveryMap({ order }: DeliveryMapProps) {
             Velocità Media
           </span>
           <span className="text-base sm:text-lg font-black text-slate-900">
-            24 km/h 🛵
+            {avgSpeedKmh} km/h 🛵
           </span>
         </div>
 

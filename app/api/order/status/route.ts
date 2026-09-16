@@ -15,11 +15,12 @@ const VALID_STATUSES: OrderStatus[] = [
 export async function PATCH(request: Request) {
   try {
     const body = await request.json();
-    const { orderId, status, estimatedTime, deliveryDuration } = body as {
+    const { orderId, status, estimatedTime, deliveryDuration, deliveryDistance } = body as {
       orderId: string;
       status: OrderStatus;
       estimatedTime?: string;
       deliveryDuration?: number;
+      deliveryDistance?: number;
     };
 
     if (!orderId || !status) {
@@ -40,7 +41,8 @@ export async function PATCH(request: Request) {
       orderId,
       status,
       estimatedTime,
-      deliveryDuration
+      deliveryDuration,
+      deliveryDistance
     );
     if (!updatedOrder) {
       return NextResponse.json(

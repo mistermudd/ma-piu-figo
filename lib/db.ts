@@ -25,6 +25,7 @@ const DEFAULT_DEMO_ORDER: Order = {
   isCodeVerified: false,
   estimatedTime: "15-20 min",
   deliveryDuration: 2,
+  deliveryDistance: 2.0,
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 };
@@ -102,7 +103,10 @@ export async function initDatabase(): Promise<boolean> {
         "ALTER TABLE orders ADD COLUMN IF NOT EXISTS estimated_time VARCHAR(50) DEFAULT '15-20 min'"
       );
       await client.query(
-        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_duration INTEGER DEFAULT 60"
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_duration INTEGER DEFAULT 2"
+      );
+      await client.query(
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_distance NUMERIC(6, 2) DEFAULT 2.0"
       );
       await client.query(
         "ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_started_at TIMESTAMP WITH TIME ZONE"
@@ -120,8 +124,8 @@ export async function initDatabase(): Promise<boolean> {
           await client.query(
             `INSERT INTO orders (
               id, order_number, customer_name, customer_address, restaurant_name,
-              items, total_amount, status, delivery_type, delivery_code, is_code_verified, estimated_time, delivery_duration
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+              items, total_amount, status, delivery_type, delivery_code, is_code_verified, estimated_time, delivery_duration, delivery_distance
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
             [
               DEFAULT_DEMO_ORDER.id,
               DEFAULT_DEMO_ORDER.orderNumber,
@@ -136,6 +140,7 @@ export async function initDatabase(): Promise<boolean> {
               DEFAULT_DEMO_ORDER.isCodeVerified,
               DEFAULT_DEMO_ORDER.estimatedTime || "15-20 min",
               DEFAULT_DEMO_ORDER.deliveryDuration || 2,
+              DEFAULT_DEMO_ORDER.deliveryDistance || 2.0,
             ]
           );
         }
@@ -156,6 +161,7 @@ export async function initDatabase(): Promise<boolean> {
 function mapRowToOrder(row: any): Order {
   const rawDuration = row.delivery_duration ? Number(row.delivery_duration) : 2;
   const safeMinutes = rawDuration > 30 ? Math.max(1, Math.round(rawDuration / 60)) : Math.max(1, rawDuration);
+  const safeDistance = row.delivery_distance ? Number(row.delivery_distance) : 2.0;
 
   return {
     id: row.id,
@@ -171,6 +177,7 @@ function mapRowToOrder(row: any): Order {
     isCodeVerified: Boolean(row.is_code_verified),
     estimatedTime: row.estimated_time || (row.delivery_type === "RITIRO" ? "10-20 min" : "15-25 min"),
     deliveryDuration: safeMinutes,
+    deliveryDistance: safeDistance,
     deliveryStartedAt: row.delivery_started_at ? new Date(row.delivery_started_at).toISOString() : undefined,
     createdAt: new Date(row.created_at).toISOString(),
     updatedAt: new Date(row.updated_at).toISOString(),
@@ -200,11 +207,13 @@ export async function updateOrderStatus(
   orderId: string,
   newStatus: OrderStatus,
   estimatedTime?: string,
-  deliveryDuration?: number
+  deliveryDuration?: number,
+  deliveryDistance?: number
 ): Promise<Order | null> {
   const p = getPool();
   const isEnteringDelivery = newStatus === "IN_CONSEGNA";
   const duration = Number(deliveryDuration) || 2;
+  const distance = deliveryDistance !== undefined ? Number(deliveryDistance) : undefined;
 
   if (p) {
     try {
@@ -216,19 +225,30 @@ export async function updateOrderStatus(
            SET status = $1, 
                delivery_started_at = CURRENT_TIMESTAMP, 
                delivery_duration = $2, 
-               estimated_time = COALESCE($3, estimated_time),
+               delivery_distance = COALESCE($3, delivery_distance, 2.0),
+               estimated_time = COALESCE($4, estimated_time),
                updated_at = CURRENT_TIMESTAMP 
-           WHERE id = $4 
+           WHERE id = $5 
            RETURNING *`,
-          [newStatus, duration, estimatedTime || null, orderId]
+          [newStatus, duration, distance !== undefined ? distance : null, estimatedTime || null, orderId]
         );
-      } else if (estimatedTime) {
+      } else if (distance !== undefined || estimatedTime || deliveryDuration !== undefined) {
         res = await p.query(
           `UPDATE orders 
-           SET status = $1, estimated_time = $2, updated_at = CURRENT_TIMESTAMP 
-           WHERE id = $3 
+           SET status = $1, 
+               estimated_time = COALESCE($2, estimated_time),
+               delivery_duration = COALESCE($3, delivery_duration),
+               delivery_distance = COALESCE($4, delivery_distance),
+               updated_at = CURRENT_TIMESTAMP 
+           WHERE id = $5 
            RETURNING *`,
-          [newStatus, estimatedTime, orderId]
+          [
+            newStatus,
+            estimatedTime || null,
+            deliveryDuration !== undefined ? duration : null,
+            distance !== undefined ? distance : null,
+            orderId,
+          ]
         );
       } else {
         res = await p.query(
@@ -254,6 +274,7 @@ export async function updateOrderStatus(
       status: newStatus,
       estimatedTime: estimatedTime || memoryOrder.estimatedTime,
       deliveryDuration: duration,
+      deliveryDistance: distance !== undefined ? distance : (memoryOrder.deliveryDistance || 2.0),
       deliveryStartedAt: isEnteringDelivery ? new Date().toISOString() : memoryOrder.deliveryStartedAt,
       updatedAt: new Date().toISOString(),
     };
@@ -347,6 +368,7 @@ export interface CreateOrderInput {
   deliveryType?: DeliveryType;
   estimatedTime?: string;
   deliveryDuration?: number;
+  deliveryDistance?: number;
   items?: { id?: string; name: string; quantity: number; price: number }[];
 }
 
@@ -375,6 +397,7 @@ export async function createNewOrder(input?: CreateOrderInput): Promise<Order> {
     (deliveryType === "RITIRO" ? "10-20 min" : "15-25 min");
 
   const deliveryDuration = Number(input?.deliveryDuration) || 2;
+  const deliveryDistance = Number(input?.deliveryDistance) || 2.0;
 
   const newOrder: Order = {
     id: "order-" + Date.now(),
@@ -390,6 +413,7 @@ export async function createNewOrder(input?: CreateOrderInput): Promise<Order> {
     isCodeVerified: false,
     estimatedTime,
     deliveryDuration,
+    deliveryDistance,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -401,8 +425,8 @@ export async function createNewOrder(input?: CreateOrderInput): Promise<Order> {
       const res = await p.query(
         `INSERT INTO orders (
           id, order_number, customer_name, customer_address, restaurant_name,
-          items, total_amount, status, delivery_type, delivery_code, is_code_verified, estimated_time, delivery_duration
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+          items, total_amount, status, delivery_type, delivery_code, is_code_verified, estimated_time, delivery_duration, delivery_distance
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
         RETURNING *`,
         [
           newOrder.id,
@@ -418,6 +442,7 @@ export async function createNewOrder(input?: CreateOrderInput): Promise<Order> {
           newOrder.isCodeVerified,
           newOrder.estimatedTime,
           newOrder.deliveryDuration,
+          newOrder.deliveryDistance,
         ]
       );
       if (res.rows.length > 0) {
