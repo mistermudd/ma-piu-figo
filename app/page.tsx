@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Order, OrderStatus, ORDER_STEPS } from "@/lib/types";
+import { Order, OrderStatus, getOrderSteps } from "@/lib/types";
 import {
   Clock,
   CheckCircle2,
   ChefHat,
   Bike,
+  ShoppingBag,
   PartyPopper,
   MapPin,
   Store,
@@ -71,9 +72,12 @@ export default function CustomerOrderPage() {
     );
   }
 
-  const currentStepIndex = ORDER_STEPS.findIndex(
+  const currentSteps = getOrderSteps(order?.deliveryType || "DOMICILIO");
+  const currentStepIndex = currentSteps.findIndex(
     (step) => step.status === order?.status
   );
+
+  const isPickup = order?.deliveryType === "RITIRO";
 
   const getStepIcon = (status: OrderStatus, index: number) => {
     const isCompleted = index < currentStepIndex;
@@ -97,7 +101,7 @@ export default function CustomerOrderPage() {
       case "IN_PREPARAZIONE":
         return <ChefHat {...iconProps} />;
       case "IN_CONSEGNA":
-        return <Bike {...iconProps} />;
+        return isPickup ? <ShoppingBag {...iconProps} /> : <Bike {...iconProps} />;
       case "CONSEGNATO":
         return <PartyPopper {...iconProps} />;
     }
@@ -120,19 +124,21 @@ export default function CustomerOrderPage() {
       {/* Intestazione Ordine */}
       <div className="bg-white border border-slate-200/80 rounded-3xl p-6 sm:p-8 shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="bg-[#00CDBC]/10 text-[#007E7A] text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">
-              Tracciamento Consegna
+              {isPickup ? "🛍️ Ritiro al Locale (Asporto)" : "🛵 Consegna a Domicilio"}
             </span>
-            <span className="text-xs text-slate-500 font-mono">
-              Ordine #{order?.orderNumber}
+            <span className="text-xs text-slate-500 font-mono bg-slate-100 px-2.5 py-0.5 rounded-full">
+              #{order?.orderNumber}
             </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-2">
-            Il tuo ordine è in arrivo!
+            {isPickup ? "Il tuo ordine è in preparazione per il ritiro!" : "Il tuo ordine è in arrivo!"}
           </h1>
           <p className="text-slate-600 text-sm mt-1">
-            Segui l&apos;avanzamento in tempo reale della preparazione e della consegna.
+            {isPickup
+              ? "Segui l'avanzamento in cucina e preparati a ritirare i tuoi piatti al ristorante."
+              : "Segui l'avanzamento in tempo reale della preparazione e della consegna a casa."}
           </p>
         </div>
 
@@ -157,7 +163,7 @@ export default function CustomerOrderPage() {
             Avanzamento Ordine
           </h2>
           <span className="text-xs font-semibold px-3 py-1 rounded-full bg-slate-100 text-slate-700">
-            Fase {currentStepIndex + 1} di {ORDER_STEPS.length}
+            Fase {currentStepIndex + 1} di {currentSteps.length}
           </span>
         </div>
 
@@ -167,12 +173,12 @@ export default function CustomerOrderPage() {
           <div
             className="absolute top-1/2 left-0 -translate-y-1/2 h-2 bg-[#00CDBC] rounded-full z-0 transition-all duration-700 ease-out"
             style={{
-              width: `${(currentStepIndex / (ORDER_STEPS.length - 1)) * 100}%`,
+              width: `${(currentStepIndex / (currentSteps.length - 1)) * 100}%`,
             }}
           />
 
           <div className="relative z-10 flex justify-between">
-            {ORDER_STEPS.map((step, idx) => {
+            {currentSteps.map((step, idx) => {
               const isCompleted = idx < currentStepIndex;
               const isCurrent = idx === currentStepIndex;
 
@@ -216,10 +222,10 @@ export default function CustomerOrderPage() {
               Stato Attuale
             </div>
             <div className="text-lg sm:text-xl font-black text-slate-900">
-              {ORDER_STEPS[currentStepIndex]?.title}
+              {currentSteps[currentStepIndex]?.title}
             </div>
             <p className="text-xs sm:text-sm text-slate-600 mt-0.5">
-              {ORDER_STEPS[currentStepIndex]?.description}
+              {currentSteps[currentStepIndex]?.description}
             </p>
           </div>
 
@@ -228,7 +234,7 @@ export default function CustomerOrderPage() {
               Tempo stimato
             </span>
             <span className="text-sm font-extrabold text-slate-800">
-              {order?.status === "CONSEGNATO" ? "Completato" : "15-25 min"}
+              {order?.status === "CONSEGNATO" ? "Completato" : isPickup ? "10-20 min" : "15-25 min"}
             </span>
           </div>
         </div>
@@ -250,21 +256,34 @@ export default function CustomerOrderPage() {
           </div>
         </div>
 
-        {/* CASO 1: Ordine in consegna -> CODICE VISIBILE CON EVIDENZA */}
+        {/* CASO 1: Ordine in consegna o pronto per il ritiro -> CODICE VISIBILE CON EVIDENZA */}
         {order?.status === "IN_CONSEGNA" ? (
           <div className="bg-gradient-to-br from-teal-500 via-[#00CDBC] to-emerald-600 text-white rounded-3xl p-6 sm:p-8 shadow-xl pulse-glow relative overflow-hidden">
             <div className="absolute top-0 right-0 -mr-8 -mt-8 w-40 h-40 bg-white/10 rounded-full blur-2xl pointer-events-none" />
             <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
               <div className="text-center md:text-left space-y-2">
                 <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-md px-3.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider text-white">
-                  <ShieldCheck className="w-4 h-4" />
-                  Rider in arrivo • Mostra questo codice
+                  {isPickup ? (
+                    <>
+                      <ShoppingBag className="w-4 h-4" />
+                      Pronto per il Ritiro • Mostra questo codice
+                    </>
+                  ) : (
+                    <>
+                      <ShieldCheck className="w-4 h-4" />
+                      Rider in arrivo • Mostra questo codice
+                    </>
+                  )}
                 </div>
                 <h4 className="text-xl sm:text-2xl font-black text-white">
-                  Il tuo codice di consegna è pronto!
+                  {isPickup
+                    ? "Il tuo ordine è pronto per il ritiro!"
+                    : "Il tuo codice di consegna è pronto!"}
                 </h4>
                 <p className="text-teal-50 text-xs sm:text-sm max-w-md">
-                  Comunica a voce o mostra questo codice di 4 cifre al rider quando citofona. Il rider lo inserirà nella sua applicazione per concludere la consegna.
+                  {isPickup
+                    ? `Mostra questo codice di 4 cifre alla cassa o al personale di ${order.restaurantName} per ritirare i tuoi piatti.`
+                    : "Comunica a voce o mostra questo codice di 4 cifre al rider quando citofona. Il rider lo inserirà nella sua applicazione per concludere la consegna."}
                 </p>
               </div>
 
@@ -301,27 +320,31 @@ export default function CustomerOrderPage() {
             </div>
           </div>
         ) : order?.status === "CONSEGNATO" ? (
-          /* CASO 2: Ordine Consegnato */
+          /* CASO 2: Ordine Consegnato / Ritirato */
           <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-2xl p-5 flex items-center gap-4">
             <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
               <CheckCircle2 className="w-6 h-6" />
             </div>
             <div>
-              <h4 className="font-bold text-base">Codice Verificato & Consegna Completata!</h4>
+              <h4 className="font-bold text-base">
+                {isPickup ? "Codice Verificato & Ordine Ritirato!" : "Codice Verificato & Consegna Completata!"}
+              </h4>
               <p className="text-xs sm:text-sm text-emerald-800 mt-0.5">
-                Il codice <span className="font-mono font-bold">{order?.deliveryCode}</span> è stato convalidato dal rider con successo. Speriamo che il pasto sia di tuo gradimento!
+                Il codice <span className="font-mono font-bold">{order?.deliveryCode}</span> è stato convalidato con successo. Speriamo che il pasto sia di tuo gradimento!
               </p>
             </div>
           </div>
         ) : (
-          /* CASO 3: Ordine non ancora in consegna */
+          /* CASO 3: Ordine non ancora in consegna / pronto */
           <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 flex items-start sm:items-center gap-3.5 text-slate-600">
             <AlertCircle className="w-5 h-5 text-slate-400 shrink-0 mt-0.5 sm:mt-0" />
             <div className="text-xs sm:text-sm">
               <span className="font-semibold text-slate-800">
-                Il codice di sicurezza comparirà qui non appena l&apos;ordine sarà contrassegnato come &quot;In Consegna&quot;.
+                {isPickup
+                  ? "Il codice di sicurezza comparirà qui non appena l'ordine sarà pronto per il ritiro al locale."
+                  : "Il codice di sicurezza comparirà qui non appena l'ordine sarà contrassegnato come \"In Consegna\"."}
               </span>{" "}
-              Attualmente il ristorante sta gestendo la comanda.
+              Attualmente il ristorante sta preparando la comanda.
             </div>
           </div>
         )}
@@ -329,17 +352,21 @@ export default function CustomerOrderPage() {
 
       {/* Dettagli Consegna e Articoli */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Scheda Destinazione e Ristorante */}
+        {/* Scheda Destinazione o Ritiro e Ristorante */}
         <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm space-y-6">
           <div>
             <h3 className="text-base font-bold text-slate-900 flex items-center gap-2 mb-3">
-              <MapPin className="w-4 h-4 text-[#00CDBC]" />
-              Dati di Consegna
+              {isPickup ? (
+                <ShoppingBag className="w-4 h-4 text-[#00CDBC]" />
+              ) : (
+                <MapPin className="w-4 h-4 text-[#00CDBC]" />
+              )}
+              {isPickup ? "Dati per il Ritiro al Locale" : "Dati di Consegna"}
             </h3>
             <div className="bg-slate-50 border border-slate-200/60 rounded-2xl p-4 space-y-2">
               <div>
                 <span className="text-[11px] font-semibold uppercase text-slate-400 block">
-                  Destinatario
+                  Cliente
                 </span>
                 <span className="text-sm font-bold text-slate-800">
                   {order?.customerName}
@@ -347,10 +374,12 @@ export default function CustomerOrderPage() {
               </div>
               <div>
                 <span className="text-[11px] font-semibold uppercase text-slate-400 block">
-                  Indirizzo
+                  {isPickup ? "Punto di Ritiro & Note" : "Indirizzo di Consegna"}
                 </span>
                 <span className="text-sm text-slate-700">
-                  {order?.customerAddress}
+                  {isPickup
+                    ? `Ritiro presso: ${order?.restaurantName} ${order?.customerAddress && order.customerAddress !== "Ritiro al bancone" ? `(${order.customerAddress})` : ""}`
+                    : order?.customerAddress}
                 </span>
               </div>
             </div>

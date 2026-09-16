@@ -1,5 +1,5 @@
 import { Pool } from "pg";
-import { Order, OrderStatus } from "./types";
+import { Order, OrderStatus, DeliveryType } from "./types";
 
 // Genera un codice casuale a 4 cifre per la verifica consegna (es. '4829')
 export function generateDeliveryCode(): string {
@@ -20,6 +20,7 @@ const DEFAULT_DEMO_ORDER: Order = {
   ],
   totalAmount: 20.0,
   status: "RICEVUTO",
+  deliveryType: "DOMICILIO",
   deliveryCode: "4829",
   isCodeVerified: false,
   createdAt: new Date().toISOString(),
@@ -71,6 +72,7 @@ export async function initDatabase(): Promise<boolean> {
           items JSONB NOT NULL DEFAULT '[]',
           total_amount NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
           status VARCHAR(32) NOT NULL DEFAULT 'RICEVUTO',
+          delivery_type VARCHAR(32) NOT NULL DEFAULT 'DOMICILIO',
           delivery_code VARCHAR(10) NOT NULL,
           is_code_verified BOOLEAN NOT NULL DEFAULT FALSE,
           created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -78,14 +80,19 @@ export async function initDatabase(): Promise<boolean> {
         );
       `);
 
+      // Aggiunge colonna se la tabella preesisteva
+      await client.query(
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_type VARCHAR(32) DEFAULT 'DOMICILIO'"
+      );
+
       // Verifica se esiste già un ordine, altrimenti inserisce quello demo
       const countRes = await client.query("SELECT COUNT(*) FROM orders");
       if (parseInt(countRes.rows[0].count, 10) === 0) {
         await client.query(
           `INSERT INTO orders (
             id, order_number, customer_name, customer_address, restaurant_name,
-            items, total_amount, status, delivery_code, is_code_verified
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+            items, total_amount, status, delivery_type, delivery_code, is_code_verified
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
           [
             DEFAULT_DEMO_ORDER.id,
             DEFAULT_DEMO_ORDER.orderNumber,
@@ -95,6 +102,7 @@ export async function initDatabase(): Promise<boolean> {
             JSON.stringify(DEFAULT_DEMO_ORDER.items),
             DEFAULT_DEMO_ORDER.totalAmount,
             DEFAULT_DEMO_ORDER.status,
+            DEFAULT_DEMO_ORDER.deliveryType,
             DEFAULT_DEMO_ORDER.deliveryCode,
             DEFAULT_DEMO_ORDER.isCodeVerified,
           ]
@@ -123,6 +131,7 @@ function mapRowToOrder(row: any): Order {
     items: typeof row.items === "string" ? JSON.parse(row.items) : row.items || [],
     totalAmount: parseFloat(row.total_amount) || 0,
     status: row.status as OrderStatus,
+    deliveryType: (row.delivery_type as DeliveryType) || "DOMICILIO",
     deliveryCode: row.delivery_code,
     isCodeVerified: Boolean(row.is_code_verified),
     createdAt: new Date(row.created_at).toISOString(),
@@ -238,6 +247,7 @@ export interface CreateOrderInput {
   restaurantName?: string;
   customerName?: string;
   customerAddress?: string;
+  deliveryType?: DeliveryType;
   items?: { id?: string; name: string; quantity: number; price: number }[];
 }
 
@@ -258,6 +268,9 @@ export async function createNewOrder(input?: CreateOrderInput): Promise<Order> {
     0
   );
 
+  const deliveryType: DeliveryType =
+    input?.deliveryType === "RITIRO" ? "RITIRO" : "DOMICILIO";
+
   const newOrder: Order = {
     id: "order-" + Date.now(),
     orderNumber: randomOrderNum,
@@ -267,6 +280,7 @@ export async function createNewOrder(input?: CreateOrderInput): Promise<Order> {
     items,
     totalAmount,
     status: "RICEVUTO",
+    deliveryType,
     deliveryCode: newCode,
     isCodeVerified: false,
     createdAt: new Date().toISOString(),
@@ -280,8 +294,8 @@ export async function createNewOrder(input?: CreateOrderInput): Promise<Order> {
       const res = await p.query(
         `INSERT INTO orders (
           id, order_number, customer_name, customer_address, restaurant_name,
-          items, total_amount, status, delivery_code, is_code_verified
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          items, total_amount, status, delivery_type, delivery_code, is_code_verified
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         RETURNING *`,
         [
           newOrder.id,
@@ -292,6 +306,7 @@ export async function createNewOrder(input?: CreateOrderInput): Promise<Order> {
           JSON.stringify(newOrder.items),
           newOrder.totalAmount,
           newOrder.status,
+          newOrder.deliveryType,
           newOrder.deliveryCode,
           newOrder.isCodeVerified,
         ]

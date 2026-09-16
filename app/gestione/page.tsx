@@ -23,6 +23,7 @@ import {
   Save,
   MapPin,
   User,
+  ShoppingBag,
 } from "lucide-react";
 
 interface EditableItem {
@@ -49,6 +50,7 @@ export default function ManagementDashboardPage() {
   const [restaurantName, setRestaurantName] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [customerAddress, setCustomerAddress] = useState("");
+  const [deliveryType, setDeliveryType] = useState<"DOMICILIO" | "RITIRO">("DOMICILIO");
   const [items, setItems] = useState<EditableItem[]>([
     { id: "1", name: "Pizza Margherita con Mozzarella di Bufala", quantity: 1, price: 9.0 },
     { id: "2", name: "Patatine Fritte Croccanti", quantity: 1, price: 4.5 },
@@ -69,6 +71,9 @@ export default function ManagementDashboardPage() {
           setRestaurantName(data.order.restaurantName || "");
           setCustomerName(data.order.customerName || "");
           setCustomerAddress(data.order.customerAddress || "");
+          if (data.order.deliveryType) {
+            setDeliveryType(data.order.deliveryType);
+          }
           if (data.order.items && data.order.items.length > 0) {
             setItems(data.order.items);
           }
@@ -140,8 +145,12 @@ export default function ManagementDashboardPage() {
       alert("Inserisci il nome del destinatario.");
       return;
     }
-    if (!customerAddress.trim()) {
-      alert("Inserisci l'indirizzo di consegna.");
+    const finalAddress =
+      customerAddress.trim() ||
+      (deliveryType === "RITIRO" ? "Ritiro al bancone" : "");
+
+    if (deliveryType === "DOMICILIO" && !finalAddress) {
+      alert("Inserisci l'indirizzo di consegna per la consegna a domicilio.");
       return;
     }
 
@@ -161,7 +170,8 @@ export default function ManagementDashboardPage() {
         body: JSON.stringify({
           restaurantName: restaurantName.trim(),
           customerName: customerName.trim(),
-          customerAddress: customerAddress.trim(),
+          customerAddress: finalAddress,
+          deliveryType,
           items: validItems.map((it) => ({
             id: it.id,
             name: it.name.trim(),
@@ -337,6 +347,39 @@ export default function ManagementDashboardPage() {
         )}
 
         <form onSubmit={handleSaveOrder} className="space-y-6">
+          {/* Selezione Modalità: Domicilio o Ritiro */}
+          <div>
+            <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block mb-2">
+              Tipologia di Ricezione Ordine
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setDeliveryType("DOMICILIO")}
+                className={`flex items-center justify-center gap-2.5 py-3.5 px-4 rounded-2xl font-bold text-xs sm:text-sm border-2 transition-all ${
+                  deliveryType === "DOMICILIO"
+                    ? "bg-[#00CDBC]/15 border-[#00CDBC] text-[#007E7A] shadow-xs ring-2 ring-[#00CDBC]/20"
+                    : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <Bike className="w-4 h-4" />
+                <span>🛵 Consegna a Casa (Domicilio)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeliveryType("RITIRO")}
+                className={`flex items-center justify-center gap-2.5 py-3.5 px-4 rounded-2xl font-bold text-xs sm:text-sm border-2 transition-all ${
+                  deliveryType === "RITIRO"
+                    ? "bg-[#00CDBC]/15 border-[#00CDBC] text-[#007E7A] shadow-xs ring-2 ring-[#00CDBC]/20"
+                    : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <ShoppingBag className="w-4 h-4" />
+                <span>🛍️ Ritiro al Locale (Asporto)</span>
+              </button>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {/* Nome Ristorante */}
             <div>
@@ -371,18 +414,24 @@ export default function ManagementDashboardPage() {
             </div>
           </div>
 
-          {/* Indirizzo di Consegna */}
+          {/* Indirizzo di Consegna / Dettagli Ritiro */}
           <div>
             <label className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5 mb-1.5">
               <MapPin className="w-4 h-4 text-[#00CDBC]" />
-              Indirizzo Completo di Consegna e Note
+              {deliveryType === "DOMICILIO"
+                ? "Indirizzo Completo di Consegna e Note"
+                : "Note Ritiro (Opzionale, es. Ritiro al banco o al tavolo)"}
             </label>
             <input
               type="text"
-              required
+              required={deliveryType === "DOMICILIO"}
               value={customerAddress}
               onChange={(e) => setCustomerAddress(e.target.value)}
-              placeholder="Es. Via Roma 42, 20121 Milano (MI) - Scala B, Citofono 3B"
+              placeholder={
+                deliveryType === "DOMICILIO"
+                  ? "Es. Via Roma 42, 20121 Milano (MI) - Scala B, Citofono 3B"
+                  : "Es. Ritiro presso il locale"
+              }
               className="w-full px-4 py-2.5 text-sm rounded-xl border border-slate-300 focus:border-[#00CDBC] focus:ring-2 focus:ring-[#00CDBC]/20 outline-none transition-all"
             />
           </div>
@@ -586,7 +635,7 @@ export default function ManagementDashboardPage() {
               <span>2. In Preparazione</span>
             </button>
 
-            {/* 3. Pulsante "Ordine in Consegna" */}
+            {/* 3. Pulsante "Ordine in Consegna o Pronto per il Ritiro" */}
             <button
               onClick={() => updateStatus("IN_CONSEGNA")}
               disabled={isUpdating}
@@ -596,14 +645,23 @@ export default function ManagementDashboardPage() {
                   : "bg-slate-50 hover:bg-teal-50 text-slate-800 hover:text-[#007E7A] border border-slate-200 hover:border-[#00CDBC]"
               }`}
             >
-              <Bike className="w-5 h-5" />
-              <span>3. Metti in Consegna</span>
+              {order?.deliveryType === "RITIRO" ? (
+                <>
+                  <ShoppingBag className="w-5 h-5" />
+                  <span>3. Pronto per il Ritiro</span>
+                </>
+              ) : (
+                <>
+                  <Bike className="w-5 h-5" />
+                  <span>3. Metti in Consegna</span>
+                </>
+              )}
             </button>
           </div>
         </div>
       </div>
 
-      {/* SEZIONE 3: INPUT BOX VERIFICA CODICE DI CONSEGNA */}
+      {/* SEZIONE 3: INPUT BOX VERIFICA CODICE DI CONSEGNA O RITIRO */}
       {order?.status === "IN_CONSEGNA" ? (
         <div className="bg-white border-2 border-[#00CDBC] rounded-3xl p-6 sm:p-8 shadow-xl relative overflow-hidden">
           <div className="flex items-start gap-4">
@@ -613,13 +671,19 @@ export default function ManagementDashboardPage() {
 
             <div className="flex-1">
               <span className="text-xs font-bold uppercase tracking-wider text-[#007E7A] bg-teal-50 px-3 py-1 rounded-full">
-                Verifica Consegna Rider
+                {order?.deliveryType === "RITIRO"
+                  ? "Verifica Ritiro Cliente (Asporto)"
+                  : "Verifica Consegna Rider"}
               </span>
               <h3 className="text-xl sm:text-2xl font-extrabold text-slate-900 mt-2">
-                Verifica Codice di Consegna
+                {order?.deliveryType === "RITIRO"
+                  ? "Verifica PIN per Consegna al Banco"
+                  : "Verifica Codice di Consegna"}
               </h3>
               <p className="text-sm text-slate-600 mt-1">
-                L&apos;ordine è stato contrassegnato come <strong>In Consegna</strong>. Il cliente sta visualizzando il suo PIN univoco. Chiedigli il codice a 4 cifre e digitalo qui sotto per verificare che sia corretto.
+                {order?.deliveryType === "RITIRO"
+                  ? "L'ordine è pronto per essere ritirato. Il cliente visualizza ora il suo codice a 4 cifre. Chiedigli il PIN per convalidare il ritiro."
+                  : "L'ordine è stato affidato al rider. Il cliente visualizza il suo PIN univoco. Chiedigli il codice a 4 cifre e digitalo qui sotto per verificare che sia corretto."}
               </p>
 
               {/* Form di verifica PIN */}
@@ -649,7 +713,11 @@ export default function ManagementDashboardPage() {
                     className="flex items-center justify-center gap-2 bg-[#00CDBC] hover:bg-[#00B8A9] text-white font-bold px-7 py-4 rounded-2xl shadow-lg shadow-[#00CDBC]/25 transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
                   >
                     <ShieldCheck className="w-5 h-5" />
-                    <span>Verifica e Consegna</span>
+                    <span>
+                      {order?.deliveryType === "RITIRO"
+                        ? "Verifica e Completa Ritiro"
+                        : "Verifica e Consegna"}
+                    </span>
                   </button>
                 </div>
 
@@ -672,7 +740,7 @@ export default function ManagementDashboardPage() {
                 {/* Suggerimento codice per debug/test rapido */}
                 <div className="pt-2 flex items-center justify-between text-xs text-slate-500 border-t border-slate-100">
                   <span className="text-[11px]">
-                    💡 Verifica di controllo: il codice viene generato in modo casuale e cifrato nel DB Neon.
+                    💡 Modalità attiva: {order?.deliveryType === "RITIRO" ? "Ritiro al banco" : "Consegna a domicilio"}
                   </span>
                   <button
                     type="button"
@@ -711,16 +779,24 @@ export default function ManagementDashboardPage() {
             <Sparkles className="w-7 h-7" />
           </div>
           <h3 className="text-xl font-black text-emerald-950">
-            Consegna Completata con Successo!
+            {order?.deliveryType === "RITIRO"
+              ? "Ordine Ritirato con Successo!"
+              : "Consegna Completata con Successo!"}
           </h3>
           <p className="text-sm text-emerald-800 max-w-md mx-auto">
-            Il codice PIN è stato convalidato e la comanda è stata chiusa su Neon PostgreSQL.
+            Il codice PIN è stato convalidato e la comanda è stata archiviata su Neon PostgreSQL.
           </p>
         </div>
       ) : (
         <div className="bg-slate-50 border border-slate-200 rounded-3xl p-6 text-center text-slate-500 text-xs sm:text-sm">
           <p>
-            ℹ️ Clicca su <strong>&quot;3. Metti in Consegna&quot;</strong> per far comparire il codice di consegna sul display del cliente e attivare qui l&apos;input box di verifica.
+            ℹ️ Clicca su{" "}
+            <strong>
+              {order?.deliveryType === "RITIRO"
+                ? '"3. Pronto per il Ritiro"'
+                : '"3. Metti in Consegna"'}
+            </strong>{" "}
+            per far comparire il codice PIN sul display del cliente e attivare qui l&apos;input box di verifica.
           </p>
         </div>
       )}
