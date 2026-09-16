@@ -326,6 +326,14 @@ export default function ManagementDashboardPage() {
     }
   };
 
+  // Modifica durata e riavvio del tragitto sulla mappa (attivabile solo da questa dashboard di gestione)
+  const handleSelectDeliveryDuration = async (newMins: number) => {
+    setDeliveryDuration(newMins);
+    if (order?.status === "IN_CONSEGNA") {
+      await updateStatus("IN_CONSEGNA", undefined, newMins);
+    }
+  };
+
   // Verifica codice di consegna inserito dal rider
   const handleVerifyCode = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -851,7 +859,7 @@ export default function ManagementDashboardPage() {
                     <button
                       key={preset.val}
                       type="button"
-                      onClick={() => setDeliveryDuration(preset.val)}
+                      onClick={() => handleSelectDeliveryDuration(preset.val)}
                       className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
                         deliveryDuration === preset.val
                           ? "bg-[#00CDBC] text-white border-[#00CDBC] shadow-xs scale-105"
@@ -872,12 +880,29 @@ export default function ManagementDashboardPage() {
                       onChange={(e) =>
                         setDeliveryDuration(Math.max(1, parseInt(e.target.value) || 2))
                       }
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          handleSelectDeliveryDuration(deliveryDuration);
+                        }
+                      }}
                       className="w-full px-2.5 py-1.5 text-xs text-center rounded-xl border border-slate-300 bg-white font-mono font-bold outline-none focus:border-[#00CDBC]"
                     />
                     <span className="absolute right-2 top-1.5 text-[10px] text-slate-400 font-bold">
                       min
                     </span>
                   </div>
+
+                  {order?.status === "IN_CONSEGNA" && (
+                    <button
+                      type="button"
+                      disabled={isUpdating}
+                      onClick={() => handleSelectDeliveryDuration(deliveryDuration)}
+                      className="text-xs font-bold text-[#007E7A] bg-teal-50 hover:bg-teal-100 px-3 py-1.5 rounded-xl border border-teal-200 transition-all active:scale-95 disabled:opacity-50"
+                      title="Applica il tempo inserito e riavvia il tragitto"
+                    >
+                      Applica tempo
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -885,12 +910,15 @@ export default function ManagementDashboardPage() {
                 <div className="mt-3 pt-3 border-t border-teal-200/60 flex flex-wrap items-center justify-between gap-2">
                   <span className="text-xs text-[#007E7A] font-semibold flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-                    Ordine in consegna (durata attiva: {order.deliveryDuration && order.deliveryDuration > 30 ? Math.round(order.deliveryDuration / 60) : (order.deliveryDuration || deliveryDuration)} min)
+                    Ordine in consegna (durata: {order.deliveryDuration && order.deliveryDuration > 30 ? Math.round(order.deliveryDuration / 60) : (order.deliveryDuration || deliveryDuration)} min)
+                    <span className="hidden md:inline text-[11px] text-teal-600 font-normal">
+                      • Riavviabile solo da qui modificando il tempo
+                    </span>
                   </span>
                   <button
                     type="button"
                     disabled={isUpdating}
-                    onClick={() => updateStatus("IN_CONSEGNA", undefined, deliveryDuration)}
+                    onClick={() => handleSelectDeliveryDuration(deliveryDuration)}
                     className="flex items-center gap-1.5 text-xs font-bold text-white bg-[#00CDBC] hover:bg-[#007E7A] px-3.5 py-1.5 rounded-xl shadow-xs transition-all active:scale-95 disabled:opacity-50"
                   >
                     <RotateCcw className="w-3.5 h-3.5" />

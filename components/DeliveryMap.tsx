@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useMemo } from "react";
 import { Order } from "@/lib/types";
 import {
   Navigation,
-  RotateCcw,
+  Clock,
   CheckCircle2,
   Building2,
   Home,
@@ -103,11 +103,15 @@ export default function DeliveryMap({ order }: DeliveryMapProps) {
         const diff = (Date.now() - startedAt) / 1000;
         if (diff > 0 && diff < durationSeconds) {
           initialElapsed = diff;
+        } else if (diff >= durationSeconds) {
+          // Tragitto già completato nel passato: resta a destinazione
+          setProgress(1);
+          return;
         }
       }
     }
 
-    // Se appena entrato o timestamp non trovato, parte da zero
+    // Parte dal punto calcolato in base al timestamp della gestione
     startTimeRef.current = Date.now() - initialElapsed * 1000;
 
     const animate = () => {
@@ -126,26 +130,7 @@ export default function DeliveryMap({ order }: DeliveryMapProps) {
     return () => {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
-  }, [order.deliveryStartedAt, order.id, durationSeconds]);
-
-  // Riavvio manuale della corsa
-  const handleRestartSimulation = () => {
-    startTimeRef.current = Date.now();
-    setProgress(0);
-
-    const animate = () => {
-      const elapsed = (Date.now() - startTimeRef.current) / 1000;
-      const currentProgress = Math.min(1, Math.max(0, elapsed / durationSeconds));
-      setProgress(currentProgress);
-
-      if (currentProgress < 1) {
-        animFrameRef.current = requestAnimationFrame(animate);
-      }
-    };
-
-    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-    animFrameRef.current = requestAnimationFrame(animate);
-  };
+  }, [order.deliveryStartedAt, order.updatedAt, order.id, durationSeconds]);
 
   // Posizione corrente del rider interpolata
   const riderPos = useMemo(() => {
@@ -212,16 +197,12 @@ export default function DeliveryMap({ order }: DeliveryMapProps) {
           </p>
         </div>
 
-        {/* Pulsante Riavvia Simulazione */}
+        {/* Badge Informativo Tempo Tragitto Impostato dalla Gestione */}
         <div className="flex items-center gap-3">
-          <button
-            onClick={handleRestartSimulation}
-            className="flex items-center gap-1.5 bg-[#00CDBC]/20 hover:bg-[#00CDBC]/30 active:scale-95 text-teal-200 hover:text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-all border border-[#00CDBC]/40 shadow-sm"
-            title="Riavvia la simulazione del percorso dall'inizio"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>Riavvia Percorso ({durationMinutes} min)</span>
-          </button>
+          <div className="flex items-center gap-2 bg-white/10 px-3.5 py-2 rounded-xl border border-white/10 text-xs font-semibold text-teal-200">
+            <Clock className="w-3.5 h-3.5 text-[#00CDBC]" />
+            <span>Tragitto: {durationMinutes} min</span>
+          </div>
         </div>
       </div>
 
@@ -472,13 +453,6 @@ export default function DeliveryMap({ order }: DeliveryMapProps) {
             <p className="text-[11px] text-slate-600 mt-1">
               Matteo è qui! Mostragli il PIN di sicurezza a 4 cifre per ricevere il tuo ordine.
             </p>
-            <button
-              onClick={handleRestartSimulation}
-              className="mt-2.5 inline-flex items-center gap-1.5 text-xs font-bold text-[#007E7A] bg-teal-50 hover:bg-teal-100 px-3.5 py-1.5 rounded-xl transition-all shadow-xs"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>Rivedi percorso animato</span>
-            </button>
           </div>
         )}
       </div>
