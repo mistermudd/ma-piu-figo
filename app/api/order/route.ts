@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getActiveOrder, isDatabaseConfigured, resetDemoOrder } from "@/lib/db";
+import { getActiveOrder, isDatabaseConfigured, createNewOrder } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -19,13 +19,21 @@ export async function GET() {
   }
 }
 
-export async function POST() {
+export async function POST(request: Request) {
   try {
-    const newOrder = await resetDemoOrder();
+    let customData;
+    try {
+      customData = await request.json();
+    } catch {
+      // Body vuoto o non JSON: usa i default
+      customData = undefined;
+    }
+
+    const newOrder = await createNewOrder(customData);
     return NextResponse.json({
       success: true,
       order: newOrder,
-      message: "Nuovo ordine creato con successo",
+      message: "Ordine salvato e inviato al database con successo",
     });
   } catch (error) {
     console.error("Errore API POST /api/order:", error);

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { Order, OrderStatus, ORDER_STEPS } from "@/lib/types";
 import {
   Clock,
@@ -14,7 +13,6 @@ import {
   Receipt,
   Copy,
   Check,
-  ArrowRight,
   RefreshCw,
   KeyRound,
   ShieldCheck,
@@ -120,41 +118,34 @@ export default function CustomerOrderPage() {
       )}
 
       {/* Intestazione Ordine */}
-      <div className="bg-white border border-slate-200/80 rounded-3xl p-6 sm:p-8 shadow-sm flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div className="bg-white border border-slate-200/80 rounded-3xl p-6 sm:p-8 shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <div className="flex items-center gap-2.5">
             <span className="bg-[#00CDBC]/10 text-[#007E7A] text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">
-              Pagina 1 • Vista Cliente
+              Tracciamento Consegna
             </span>
             <span className="text-xs text-slate-500 font-mono">
-              #{order?.orderNumber}
+              Ordine #{order?.orderNumber}
             </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-2">
-            Stato dell&apos;Ordine
+            Il tuo ordine è in arrivo!
           </h1>
           <p className="text-slate-600 text-sm mt-1">
-            Questa pagina si aggiorna <strong className="text-slate-900">in tempo reale</strong> quando la cucina o il rider modificano lo stato dalla dashboard.
+            Segui l&apos;avanzamento in tempo reale della preparazione e della consegna.
           </p>
         </div>
 
-        <div className="flex items-center gap-3 self-start md:self-auto">
+        <div className="flex items-center gap-3 self-start sm:self-auto">
           <button
             onClick={() => fetchOrder(true)}
             disabled={isRefreshing}
-            className="flex items-center gap-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 px-3 py-2 rounded-xl transition-colors active:scale-95 disabled:opacity-50"
+            className="flex items-center gap-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 px-3.5 py-2.5 rounded-xl transition-colors active:scale-95 disabled:opacity-50 shadow-xs"
             title="Aggiorna manualmente"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin text-[#00CDBC]" : ""}`} />
-            <span>Sincronizzato</span>
+            <span>Aggiornamento Live</span>
           </button>
-          <Link
-            href="/gestione"
-            className="flex items-center gap-2 text-xs sm:text-sm font-semibold text-white bg-[#00CDBC] hover:bg-[#00B8A9] px-4 py-2.5 rounded-xl shadow-md shadow-[#00CDBC]/20 transition-all active:scale-95"
-          >
-            <span>Apri Dashboard Gestione</span>
-            <ArrowRight className="w-4 h-4" />
-          </Link>
         </div>
       </div>
 

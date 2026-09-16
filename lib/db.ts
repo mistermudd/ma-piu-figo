@@ -234,13 +234,38 @@ export async function verifyDeliveryCode(
   return { success: true, order: memoryOrder };
 }
 
-export async function resetDemoOrder(): Promise<Order> {
+export interface CreateOrderInput {
+  restaurantName?: string;
+  customerName?: string;
+  customerAddress?: string;
+  items?: { id?: string; name: string; quantity: number; price: number }[];
+}
+
+export async function createNewOrder(input?: CreateOrderInput): Promise<Order> {
   const newCode = generateDeliveryCode();
   const randomOrderNum = "DEL-" + Math.floor(1000 + Math.random() * 9000);
+
+  const rawItems = input?.items && input.items.length > 0 ? input.items : DEFAULT_DEMO_ORDER.items;
+  const items = rawItems.map((item, idx) => ({
+    id: item.id || `item-${Date.now()}-${idx}`,
+    name: item.name.trim() || "Piatto Speciale",
+    quantity: Math.max(1, Number(item.quantity) || 1),
+    price: Math.max(0, Number(item.price) || 0),
+  }));
+
+  const totalAmount = items.reduce(
+    (sum, item) => sum + item.price * item.quantity,
+    0
+  );
+
   const newOrder: Order = {
-    ...DEFAULT_DEMO_ORDER,
     id: "order-" + Date.now(),
     orderNumber: randomOrderNum,
+    restaurantName: input?.restaurantName?.trim() || DEFAULT_DEMO_ORDER.restaurantName,
+    customerName: input?.customerName?.trim() || DEFAULT_DEMO_ORDER.customerName,
+    customerAddress: input?.customerAddress?.trim() || DEFAULT_DEMO_ORDER.customerAddress,
+    items,
+    totalAmount,
     status: "RICEVUTO",
     deliveryCode: newCode,
     isCodeVerified: false,
@@ -275,10 +300,13 @@ export async function resetDemoOrder(): Promise<Order> {
         return mapRowToOrder(res.rows[0]);
       }
     } catch (err) {
-      console.warn("Errore resetDemoOrder su PostgreSQL, resetto memoria:", err);
+      console.warn("Errore createNewOrder su PostgreSQL, salvo in memoria:", err);
     }
   }
 
   memoryOrder = newOrder;
   return memoryOrder;
 }
+
+export const resetDemoOrder = createNewOrder;
+
