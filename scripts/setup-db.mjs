@@ -1,7 +1,14 @@
 import pg from "pg";
 const { Pool } = pg;
 
-const connectionString = "postgresql://neondb_owner:npg_6kRgXI7JeEvp@ep-bold-lab-b4qsw46x-pooler.c-6.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require";
+const connectionString = process.env.DATABASE_URL;
+
+if (!connectionString) {
+  console.error("ERRORE: Variabile d'ambiente DATABASE_URL non impostata.");
+  console.error("Esegui lo script specificando DATABASE_URL, ad esempio:");
+  console.error("  DATABASE_URL='postgresql://...' node scripts/setup-db.mjs");
+  process.exit(1);
+}
 
 console.log("Tentativo di connessione a Neon PostgreSQL...");
 

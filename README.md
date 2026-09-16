@@ -57,7 +57,7 @@ Applicazione web full-stack per il tracciamento degli ordini in stile Deliveroo,
    - **Start Command**: `npm run start`
    - **Plan**: `Free`
 5. Nella sezione **Environment Variables**, aggiungi:
-   - `DATABASE_URL`: `postgresql://neondb_owner:npg_6kRgXI7JeEvp@ep-bold-lab-b4qsw46x-pooler.c-6.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require`
+   - `DATABASE_URL`: la stringa di connessione fornita dalla console Neon (es. `postgresql://neondb_owner:YOUR_PASSWORD@ep-bold-lab-b4qsw46x-pooler.c-6.us-east-2.aws.neon.tech/neondb?sslmode=require`)
    - `NODE_VERSION`: `20.18.0`
 6. Clicca su **Deploy Web Service**. Il tuo frontend Next.js sarà subito online e connesso al tuo database Neon!
 
@@ -80,4 +80,3 @@ Consiglio: apri le due pagine affiancate in due schede del browser per osservare
 npm run build
 npm start
 ```
->>>>>>> 5ab1444 (feat: DeliveroMatteo tracking e dashboard gestione con Neon PostgreSQL)

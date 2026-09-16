@@ -29,19 +29,19 @@ const DEFAULT_DEMO_ORDER: Order = {
   updatedAt: new Date().toISOString(),
 };
 
-// Neon PostgreSQL connection string predefinita per l'applicazione
-const DEFAULT_NEON_DATABASE_URL =
-  "postgresql://neondb_owner:npg_6kRgXI7JeEvp@ep-bold-lab-b4qsw46x-pooler.c-6.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require";
-
-// Fallback in-memory quando DATABASE_URL non è raggiungibile
+// Fallback in-memory quando DATABASE_URL non è impostato
 let memoryOrder: Order | null = { ...DEFAULT_DEMO_ORDER };
-
 let pool: Pool | null = null;
 let isDbInitialized = false;
 
+// Neon connection string: letta esclusivamente dalle variabili d'ambiente di sistema
 function getConnectionString(): string | null {
-  const connectionString = process.env.DATABASE_URL || DEFAULT_NEON_DATABASE_URL;
-  if (!connectionString || connectionString.includes("ep-sample-123456")) {
+  const connectionString = process.env.DATABASE_URL;
+  if (
+    !connectionString ||
+    connectionString.includes("ep-sample-123456") ||
+    connectionString.includes("YOUR_PASSWORD")
+  ) {
     return null;
   }
   return connectionString;
