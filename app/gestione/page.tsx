@@ -25,6 +25,8 @@ import {
   User,
   ShoppingBag,
   Flame,
+  Clock,
+  XCircle,
 } from "lucide-react";
 
 interface EditableItem {
@@ -52,6 +54,11 @@ export default function ManagementDashboardPage() {
   const [customerName, setCustomerName] = useState("");
   const [customerAddress, setCustomerAddress] = useState("");
   const [deliveryType, setDeliveryType] = useState<"DOMICILIO" | "RITIRO">("DOMICILIO");
+  const [estimatedTime, setEstimatedTime] = useState<string>("15-20 min");
+  const [customTimeInput, setCustomTimeInput] = useState<string>("");
+  const [isUpdatingTime, setIsUpdatingTime] = useState(false);
+  const [timeUpdatedBanner, setTimeUpdatedBanner] = useState<string | null>(null);
+  const [isDeletingOrder, setIsDeletingOrder] = useState(false);
   const [items, setItems] = useState<EditableItem[]>([
     { id: "1", name: "Pizza Margherita con Mozzarella di Bufala", quantity: 1, price: 9.0 },
     { id: "2", name: "Patatine Fritte Croccanti", quantity: 1, price: 4.5 },
@@ -64,20 +71,21 @@ export default function ManagementDashboardPage() {
     try {
       const res = await fetch("/api/order", { cache: "no-store" });
       const data = await res.json();
-      if (data.order) {
-        setOrder(data.order);
-        setIsDbConnected(data.isDatabaseConnected);
+      setOrder(data.order || null);
+      setIsDbConnected(data.isDatabaseConnected);
 
-        if (populateForm) {
-          setRestaurantName(data.order.restaurantName || "");
-          setCustomerName(data.order.customerName || "");
-          setCustomerAddress(data.order.customerAddress || "");
-          if (data.order.deliveryType) {
-            setDeliveryType(data.order.deliveryType);
-          }
-          if (data.order.items && data.order.items.length > 0) {
-            setItems(data.order.items);
-          }
+      if (data.order && populateForm) {
+        setRestaurantName(data.order.restaurantName || "");
+        setCustomerName(data.order.customerName || "");
+        setCustomerAddress(data.order.customerAddress || "");
+        if (data.order.deliveryType) {
+          setDeliveryType(data.order.deliveryType);
+        }
+        if (data.order.estimatedTime) {
+          setEstimatedTime(data.order.estimatedTime);
+        }
+        if (data.order.items && data.order.items.length > 0) {
+          setItems(data.order.items);
         }
       }
     } catch (err) {
@@ -119,8 +127,8 @@ export default function ManagementDashboardPage() {
     field: keyof EditableItem,
     value: string | number
   ) => {
-    setItems(
-      items.map((item) => {
+    setItems((prevItems) =>
+      prevItems.map((item) => {
         if (item.id === id) {
           return { ...item, [field]: value };
         }
@@ -129,13 +137,13 @@ export default function ManagementDashboardPage() {
     );
   };
 
-  // Calcolo totale dinamico
+  // Totale calcolato in tempo reale
   const calculatedTotal = items.reduce(
     (sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 1),
     0
   );
 
-  // Salvataggio e creazione ordine personalizzato
+  // Salvataggio nuovo ordine nel database Neon
   const handleSaveOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!restaurantName.trim()) {
@@ -143,7 +151,7 @@ export default function ManagementDashboardPage() {
       return;
     }
     if (!customerName.trim()) {
-      alert("Inserisci il nome del destinatario.");
+      alert("Inserisci il nome del cliente.");
       return;
     }
     const finalAddress =
@@ -173,6 +181,7 @@ export default function ManagementDashboardPage() {
           customerName: customerName.trim(),
           customerAddress: finalAddress,
           deliveryType,
+          estimatedTime,
           items: validItems.map((it) => ({
             id: it.id,
             name: it.name.trim(),
@@ -201,12 +210,78 @@ export default function ManagementDashboardPage() {
     }
   };
 
-  // Aggiornamento stato ordine
-  const updateStatus = async (newStatus: OrderStatus) => {
+  // Cancellazione ordine (Azzera la comanda e mette la pagina cliente in 'In attesa del cliente')
+  const handleDeleteOrder = async () => {
+    if (!order) return;
+    const confirmDelete = window.confirm(
+      "Sei sicuro di voler cancellare l'ordine attuale? La pagina cliente tornerà in stato 'In attesa del cliente'."
+    );
+    if (!confirmDelete) return;
+
+    setIsDeletingOrder(true);
+    try {
+      const res = await fetch("/api/order", {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (data.success) {
+        setOrder(null);
+        setOrderSavedBanner("Ordine cancellato. La pagina cliente ora mostra 'In attesa del cliente'.");
+        setVerificationCode("");
+        setVerificationError(null);
+        setVerificationSuccess(null);
+        setTimeout(() => setOrderSavedBanner(null), 4000);
+      } else {
+        alert(data.error || "Errore nella cancellazione dell'ordine");
+      }
+    } catch (err) {
+      console.error("Errore cancellazione:", err);
+      alert("Errore di rete durante la cancellazione dell'ordine.");
+    } finally {
+      setIsDeletingOrder(false);
+    }
+  };
+
+  // Aggiornamento tempo stimato live
+  const handleUpdateEstimatedTime = async (newTime: string) => {
+    if (!newTime.trim()) return;
+    const cleanTime = newTime.trim();
+    setEstimatedTime(cleanTime);
+    if (!order) return;
+
+    setIsUpdatingTime(true);
+    try {
+      const res = await fetch("/api/order/status", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId: order.id,
+          status: order.status,
+          estimatedTime: cleanTime,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success && data.order) {
+        setOrder(data.order);
+        setTimeUpdatedBanner(`Tempo stimato aggiornato a: ${cleanTime}`);
+        setTimeout(() => setTimeUpdatedBanner(null), 3000);
+      }
+    } catch (err) {
+      console.error("Errore aggiornamento tempo:", err);
+    } finally {
+      setIsUpdatingTime(false);
+    }
+  };
+
+  // Aggiornamento stato ordine (con tempo stimato associato)
+  const updateStatus = async (newStatus: OrderStatus, customTime?: string) => {
     if (!order) return;
     setIsUpdating(true);
     setVerificationError(null);
     setVerificationSuccess(null);
+
+    const timeToApply = customTime || estimatedTime;
 
     try {
       const res = await fetch("/api/order/status", {
@@ -215,6 +290,7 @@ export default function ManagementDashboardPage() {
         body: JSON.stringify({
           orderId: order.id,
           status: newStatus,
+          estimatedTime: timeToApply,
         }),
       });
 
@@ -305,7 +381,7 @@ export default function ManagementDashboardPage() {
               Area Riservata Partner
             </span>
             <span className="text-xs text-slate-500 font-mono">
-              Comanda #{order?.orderNumber}
+              {order ? `Comanda #${order.orderNumber}` : "Nessuna comanda attiva"}
             </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-2">
@@ -316,11 +392,44 @@ export default function ManagementDashboardPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-full bg-slate-100 text-slate-700 self-start sm:self-auto border border-slate-200">
-          <Database className="w-3.5 h-3.5 text-[#00CDBC]" />
-          <span>{isDbConnected ? "Neon DB Attivo" : "Modalità Locale"}</span>
+        <div className="flex flex-wrap items-center gap-3 self-start sm:self-auto">
+          {order && (
+            <button
+              type="button"
+              onClick={handleDeleteOrder}
+              disabled={isDeletingOrder}
+              className="flex items-center gap-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-3.5 py-2 rounded-xl text-xs font-bold transition-all active:scale-95 disabled:opacity-50 shadow-xs"
+              title="Cancella comanda e azzera vista cliente"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+              <span>{isDeletingOrder ? "Cancellazione..." : "Cancella Ordine"}</span>
+            </button>
+          )}
+
+          <div className="flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+            <Database className="w-3.5 h-3.5 text-[#00CDBC]" />
+            <span>{isDbConnected ? "Neon DB Attivo" : "Modalità Locale"}</span>
+          </div>
         </div>
       </div>
+
+      {/* Banner se non c'è alcun ordine attivo */}
+      {!order && (
+        <div className="bg-amber-50/80 border border-amber-200 text-amber-950 rounded-3xl p-6 sm:p-7 flex flex-col sm:flex-row items-center gap-5 shadow-xs">
+          <div className="w-12 h-12 rounded-2xl bg-amber-200/60 text-amber-800 flex items-center justify-center shrink-0">
+            <Clock className="w-6 h-6 animate-pulse" />
+          </div>
+          <div className="text-center sm:text-left flex-1">
+            <h3 className="font-extrabold text-base sm:text-lg text-slate-900">
+              Nessun ordine attivo al momento
+            </h3>
+            <p className="text-xs sm:text-sm text-slate-600 mt-1">
+              La pagina del cliente sta attualmente visualizzando <strong>"In attesa del cliente"</strong>.
+              Compila il modulo sottostante per creare una nuova comanda e avviare il tracciamento in tempo reale.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* SEZIONE 1: FORM COMPLETO INSERIMENTO DATI ORDINE, RISTORANTE E PRODOTTI */}
       <div className="bg-white border border-slate-200/80 rounded-3xl p-6 sm:p-8 shadow-sm">
@@ -435,6 +544,39 @@ export default function ManagementDashboardPage() {
               }
               className="w-full px-4 py-2.5 text-sm rounded-xl border border-slate-300 focus:border-[#00CDBC] focus:ring-2 focus:ring-[#00CDBC]/20 outline-none transition-all"
             />
+          </div>
+
+          {/* Tempo Stimato Iniziale */}
+          <div>
+            <label className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5 mb-1.5">
+              <Clock className="w-4 h-4 text-[#00CDBC]" />
+              Tempo Stimato di Preparazione (Variabile mostrata al cliente)
+            </label>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="text"
+                value={estimatedTime}
+                onChange={(e) => setEstimatedTime(e.target.value)}
+                placeholder="Es. 15-20 min"
+                className="w-full sm:w-48 px-4 py-2 text-sm rounded-xl border border-slate-300 focus:border-[#00CDBC] focus:ring-2 focus:ring-[#00CDBC]/20 outline-none transition-all font-semibold"
+              />
+              <div className="flex flex-wrap gap-1.5">
+                {["10-15 min", "15-20 min", "20-30 min", "30-45 min"].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setEstimatedTime(preset)}
+                    className={`px-3 py-2 rounded-xl text-xs font-bold transition-all border ${
+                      estimatedTime === preset
+                        ? "bg-[#00CDBC] text-white border-[#00CDBC] shadow-xs"
+                        : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                    }`}
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
           {/* LISTA DINAMICA DEI PRODOTTI */}
@@ -559,29 +701,35 @@ export default function ManagementDashboardPage() {
       </div>
 
       {/* SEZIONE 2: PULSANTI DI CONTROLLO STATO ORDINE */}
-      <div className="bg-white border border-slate-200/80 rounded-3xl p-6 sm:p-8 shadow-sm">
+      <div className={`bg-white border border-slate-200/80 rounded-3xl p-6 sm:p-8 shadow-sm ${!order ? "opacity-60 pointer-events-none" : ""}`}>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-100">
           <div>
             <span className="text-[11px] font-bold uppercase text-slate-400 tracking-wider block">
               Stato Attivo nel Database
             </span>
             <div className="flex items-center gap-3 mt-1">
-              <span
-                className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold ${
-                  order?.status === "RICEVUTO"
-                    ? "bg-amber-100 text-amber-800"
-                    : order?.status === "ACCETTATO"
-                    ? "bg-blue-100 text-blue-800"
-                    : order?.status === "IN_PREPARAZIONE"
-                    ? "bg-purple-100 text-purple-800"
-                    : order?.status === "IN_CONSEGNA"
-                    ? "bg-[#00CDBC]/20 text-[#007E7A] ring-2 ring-[#00CDBC]/40"
-                    : "bg-emerald-100 text-emerald-800"
-                }`}
-              >
-                <span className="w-2 h-2 rounded-full bg-current animate-pulse" />
-                {order?.status}
-              </span>
+              {order ? (
+                <span
+                  className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold ${
+                    order.status === "RICEVUTO"
+                      ? "bg-amber-100 text-amber-800"
+                      : order.status === "ACCETTATO"
+                      ? "bg-blue-100 text-blue-800"
+                      : order.status === "IN_PREPARAZIONE"
+                      ? "bg-purple-100 text-purple-800"
+                      : order.status === "IN_CONSEGNA"
+                      ? "bg-[#00CDBC]/20 text-[#007E7A] ring-2 ring-[#00CDBC]/40"
+                      : "bg-emerald-100 text-emerald-800"
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full bg-current animate-pulse" />
+                  {order.status}
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold bg-slate-100 text-slate-500">
+                  Nessuna comanda attiva
+                </span>
+              )}
 
               {order?.status === "IN_CONSEGNA" && (
                 <span className="text-xs font-semibold text-[#007E7A] bg-teal-50 px-2.5 py-1 rounded-lg border border-teal-200">
@@ -593,10 +741,10 @@ export default function ManagementDashboardPage() {
 
           <div className="text-xs text-slate-600 sm:text-right">
             <div>
-              Ristorante: <strong className="text-slate-900">{order?.restaurantName}</strong>
+              Ristorante: <strong className="text-slate-900">{order?.restaurantName || "Nessuno"}</strong>
             </div>
             <div>
-              Cliente: <strong className="text-slate-800">{order?.customerName}</strong>
+              Cliente: <strong className="text-slate-800">{order?.customerName || "Nessuno"}</strong>
             </div>
           </div>
         </div>
@@ -697,6 +845,66 @@ export default function ManagementDashboardPage() {
               <p className="text-purple-200/90 text-xs sm:text-sm max-w-xl">
                 I piatti per <strong>{order.customerName}</strong> ({order.items.length} prodotti) sono attualmente in lavorazione in cucina. Quando pronti, clicca su <em>"{order.deliveryType === 'RITIRO' ? 'Pronto per il Ritiro' : 'Metti in Consegna'}"</em> per generare il codice di verifica.
               </p>
+
+              {/* Sezione di Modifica / Aggiornamento Tempo Stimato Live */}
+              <div className="mt-4 pt-4 border-t border-purple-800/60 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-xs text-purple-200">
+                    <Clock className="w-4 h-4 text-amber-400" />
+                    <span>Tempo stimato per il cliente:</span>
+                    <strong className="text-amber-300 text-sm font-black bg-purple-900/80 px-2.5 py-0.5 rounded-lg border border-purple-700">
+                      {order.estimatedTime || estimatedTime || "15-20 min"}
+                    </strong>
+                  </div>
+
+                  {timeUpdatedBanner && (
+                    <span className="text-[11px] font-bold text-emerald-300 bg-emerald-950/60 px-2.5 py-0.5 rounded-md border border-emerald-500/40 animate-pulse">
+                      ✓ {timeUpdatedBanner}
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-purple-300 font-semibold">Aggiorna rapido:</span>
+                  {["10-15 min", "15-20 min", "20-30 min", "30-45 min"].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      disabled={isUpdatingTime}
+                      onClick={() => handleUpdateEstimatedTime(preset)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                        (order.estimatedTime || estimatedTime) === preset
+                          ? "bg-amber-400 text-slate-900 shadow-md font-black ring-2 ring-amber-300"
+                          : "bg-purple-900/60 hover:bg-purple-800 text-purple-200 border border-purple-700 hover:text-white"
+                      }`}
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Input personalizzato per tempo libero */}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={customTimeInput}
+                    onChange={(e) => setCustomTimeInput(e.target.value)}
+                    placeholder="Oppure inserisci es. 25 min..."
+                    className="px-3 py-1.5 text-xs rounded-xl bg-purple-900/40 border border-purple-700 text-white placeholder:text-purple-400/60 focus:outline-none focus:border-amber-400 flex-1 max-w-xs"
+                  />
+                  <button
+                    type="button"
+                    disabled={isUpdatingTime || !customTimeInput.trim()}
+                    onClick={() => {
+                      handleUpdateEstimatedTime(customTimeInput);
+                      setCustomTimeInput("");
+                    }}
+                    className="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold text-xs rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {isUpdatingTime ? "Salvataggio..." : "Aggiorna Tempo"}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

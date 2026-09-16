@@ -35,10 +35,8 @@ export default function CustomerOrderPage() {
     try {
       const res = await fetch("/api/order", { cache: "no-store" });
       const data = await res.json();
-      if (data.order) {
-        setOrder(data.order);
-        setIsDbConnected(data.isDatabaseConnected);
-      }
+      setOrder(data.order || null);
+      setIsDbConnected(data.isDatabaseConnected);
     } catch (err) {
       console.error("Errore recupero ordine:", err);
     } finally {
@@ -69,6 +67,47 @@ export default function CustomerOrderPage() {
         <p className="text-slate-600 font-medium text-sm animate-pulse">
           Caricamento dettagli ordine in corso...
         </p>
+      </div>
+    );
+  }
+
+  // Quando non c'è alcun ordine attivo (ordine cancellato o non presente)
+  if (!order) {
+    return (
+      <div className="space-y-8 max-w-2xl mx-auto py-8">
+        {!isDbConnected && (
+          <div className="bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 rounded-2xl flex items-start gap-3 text-xs sm:text-sm shadow-sm">
+            <Database className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <span className="font-semibold">Modalità Dimostrativa Attiva:</span>{" "}
+              Il database Neon PostgreSQL non è ancora collegato o raggiungibile.
+            </div>
+          </div>
+        )}
+
+        <div className="bg-white border border-slate-200/80 rounded-3xl p-8 sm:p-12 text-center shadow-sm relative overflow-hidden">
+          <div className="w-20 h-20 mx-auto rounded-3xl bg-[#00CDBC]/10 text-[#007E7A] flex items-center justify-center mb-5 ring-8 ring-[#00CDBC]/5">
+            <Clock className="w-10 h-10 animate-pulse text-[#00CDBC]" />
+          </div>
+
+          <div className="inline-flex items-center gap-2 bg-slate-100 text-slate-700 text-xs font-bold px-3.5 py-1.5 rounded-full uppercase tracking-wider mb-3">
+            <span className="w-2 h-2 rounded-full bg-[#00CDBC] animate-ping" />
+            In attesa
+          </div>
+
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+            In attesa del cliente
+          </h1>
+
+          <p className="text-slate-600 text-sm sm:text-base mt-3 max-w-md mx-auto leading-relaxed">
+            Non c'è alcun ordine attivo al momento. Non appena verrà registrata una nuova comanda, i dettagli e lo stato di avanzamento compariranno qui automaticamente in tempo reale.
+          </p>
+
+          <div className="mt-8 pt-6 border-t border-slate-100 flex items-center justify-center gap-2 text-xs text-slate-400 font-medium">
+            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            Sincronizzazione in tempo reale attiva
+          </div>
+        </div>
       </div>
     );
   }
@@ -179,51 +218,61 @@ export default function CustomerOrderPage() {
           </span>
         </div>
 
-        {/* Barra di avanzamento grafica */}
-        <div className="relative mb-10 mt-4">
-          <div className="absolute top-1/2 left-0 right-0 -translate-y-1/2 h-2 bg-slate-100 rounded-full z-0" />
-          <div
-            className="absolute top-1/2 left-0 -translate-y-1/2 h-2 bg-[#00CDBC] rounded-full z-0 transition-all duration-700 ease-out"
-            style={{
-              width: `${(currentStepIndex / (currentSteps.length - 1)) * 100}%`,
-            }}
-          />
+        {/* Fasi dell'Ordine (Icone e Titoli) */}
+        <div className="grid grid-cols-5 gap-2 sm:gap-4 mt-2">
+          {currentSteps.map((step, idx) => {
+            const isCompleted = idx < currentStepIndex;
+            const isCurrent = idx === currentStepIndex;
 
-          <div className="relative z-10 flex justify-between">
-            {currentSteps.map((step, idx) => {
-              const isCompleted = idx < currentStepIndex;
-              const isCurrent = idx === currentStepIndex;
-
-              return (
+            return (
+              <div
+                key={step.status}
+                className="flex flex-col items-center text-center group"
+              >
                 <div
-                  key={step.status}
-                  className="flex flex-col items-center text-center group"
+                  className={`w-10 h-10 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center transition-all duration-300 ${
+                    isCurrent
+                      ? "bg-[#00CDBC] text-white ring-4 ring-[#00CDBC]/25 shadow-lg scale-105"
+                      : isCompleted
+                      ? "bg-[#00CDBC] text-white shadow-sm"
+                      : "bg-slate-50 border-2 border-slate-200 text-slate-400"
+                  }`}
                 >
-                  <div
-                    className={`w-10 h-10 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center transition-all duration-300 ${
-                      isCurrent
-                        ? "bg-[#00CDBC] text-white ring-4 ring-[#00CDBC]/25 shadow-lg scale-110"
-                        : isCompleted
-                        ? "bg-[#00CDBC] text-white shadow-sm"
-                        : "bg-white border-2 border-slate-200 text-slate-400"
-                    }`}
-                  >
-                    {getStepIcon(step.status, idx)}
-                  </div>
-                  <span
-                    className={`mt-3 text-xs sm:text-sm font-semibold max-w-[80px] sm:max-w-[100px] leading-tight ${
-                      isCurrent
-                        ? "text-[#007E7A] font-bold"
-                        : isCompleted
-                        ? "text-slate-800"
-                        : "text-slate-400"
-                    }`}
-                  >
-                    {step.title}
-                  </span>
+                  {getStepIcon(step.status, idx)}
                 </div>
-              );
-            })}
+                <span
+                  className={`mt-2.5 text-[10px] sm:text-xs md:text-sm font-semibold leading-tight line-clamp-2 ${
+                    isCurrent
+                      ? "text-[#007E7A] font-bold"
+                      : isCompleted
+                      ? "text-slate-800"
+                      : "text-slate-400"
+                  }`}
+                >
+                  {step.title}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Barra di avanzamento grafica SOTTO alle fasi */}
+        <div className="mt-8 mb-6">
+          <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden p-0.5 border border-slate-200/60 shadow-inner">
+            <div
+              className="h-full bg-gradient-to-r from-[#00CDBC] to-[#007E7A] rounded-full transition-all duration-700 ease-out shadow-xs"
+              style={{
+                width: `${Math.max(5, (currentStepIndex / (currentSteps.length - 1)) * 100)}%`,
+              }}
+            />
+          </div>
+          <div className="flex justify-between items-center mt-2 px-1 text-[11px] font-semibold text-slate-400">
+            <span>Presa in carico</span>
+            <span className="text-[#007E7A] font-bold">
+              Fase {currentStepIndex + 1} di {currentSteps.length} (
+              {Math.round((currentStepIndex / (currentSteps.length - 1)) * 100)}%)
+            </span>
+            <span>{isPickup ? "Ritiro" : "Consegna"}</span>
           </div>
         </div>
 
@@ -241,12 +290,14 @@ export default function CustomerOrderPage() {
             </p>
           </div>
 
-          <div className="shrink-0 bg-white border border-slate-200 px-4 py-2 rounded-xl text-center shadow-xs">
+          <div className="shrink-0 bg-white border border-slate-200 px-4 py-2.5 rounded-xl text-center shadow-xs">
             <span className="text-[11px] font-medium text-slate-500 block">
               Tempo stimato
             </span>
-            <span className="text-sm font-extrabold text-slate-800">
-              {order?.status === "CONSEGNATO" ? "Completato" : isPickup ? "10-20 min" : "15-25 min"}
+            <span className="text-sm sm:text-base font-black text-slate-900">
+              {order?.status === "CONSEGNATO"
+                ? (isPickup ? "Ritirato" : "Consegnato")
+                : (order?.estimatedTime || (isPickup ? "10-20 min" : "15-25 min"))}
             </span>
           </div>
         </div>
@@ -282,7 +333,7 @@ export default function CustomerOrderPage() {
                 Lo Chef sta creando il tuo ordine con passione!
               </h3>
               <p className="text-amber-100 text-xs sm:text-sm max-w-xl">
-                I tuoi piatti sono in preparazione in cucina con ingredienti freschissimi. Lo Chef cura ogni dettaglio per garantirti un pasto speciale.
+                I tuoi piatti sono in preparazione con ingredienti freschissimi. Tempo stimato aggiornato dallo Chef: <strong className="text-white underline decoration-amber-300">{order?.estimatedTime || (isPickup ? "10-20 min" : "15-25 min")}</strong>.
               </p>
             </div>
           </div>

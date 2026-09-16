@@ -23,6 +23,7 @@ const DEFAULT_DEMO_ORDER: Order = {
   deliveryType: "DOMICILIO",
   deliveryCode: "4829",
   isCodeVerified: false,
+  estimatedTime: "15-20 min",
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 };
@@ -32,7 +33,7 @@ const DEFAULT_NEON_DATABASE_URL =
   "postgresql://neondb_owner:npg_6kRgXI7JeEvp@ep-bold-lab-b4qsw46x-pooler.c-6.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require";
 
 // Fallback in-memory quando DATABASE_URL non è raggiungibile
-let memoryOrder: Order = { ...DEFAULT_DEMO_ORDER };
+let memoryOrder: Order | null = { ...DEFAULT_DEMO_ORDER };
 
 let pool: Pool | null = null;
 let isDbInitialized = false;
@@ -92,33 +93,39 @@ export async function initDatabase(): Promise<boolean> {
         );
       `);
 
-      // Aggiunge colonna se la tabella preesisteva
+      // Aggiunge colonne se la tabella preesisteva
       await client.query(
         "ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_type VARCHAR(32) DEFAULT 'DOMICILIO'"
       );
+      await client.query(
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS estimated_time VARCHAR(50) DEFAULT '15-20 min'"
+      );
 
-      // Verifica se esiste già un ordine, altrimenti inserisce quello demo
-      const countRes = await client.query("SELECT COUNT(*) FROM orders");
-      if (parseInt(countRes.rows[0].count, 10) === 0) {
-        await client.query(
-          `INSERT INTO orders (
-            id, order_number, customer_name, customer_address, restaurant_name,
-            items, total_amount, status, delivery_type, delivery_code, is_code_verified
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-          [
-            DEFAULT_DEMO_ORDER.id,
-            DEFAULT_DEMO_ORDER.orderNumber,
-            DEFAULT_DEMO_ORDER.customerName,
-            DEFAULT_DEMO_ORDER.customerAddress,
-            DEFAULT_DEMO_ORDER.restaurantName,
-            JSON.stringify(DEFAULT_DEMO_ORDER.items),
-            DEFAULT_DEMO_ORDER.totalAmount,
-            DEFAULT_DEMO_ORDER.status,
-            DEFAULT_DEMO_ORDER.deliveryType,
-            DEFAULT_DEMO_ORDER.deliveryCode,
-            DEFAULT_DEMO_ORDER.isCodeVerified,
-          ]
-        );
+      // Inserisce ordine demo solo la prima volta se il DB è completamente vuoto
+      if (!isDbInitialized) {
+        const countRes = await client.query("SELECT COUNT(*) FROM orders");
+        if (parseInt(countRes.rows[0].count, 10) === 0 && memoryOrder) {
+          await client.query(
+            `INSERT INTO orders (
+              id, order_number, customer_name, customer_address, restaurant_name,
+              items, total_amount, status, delivery_type, delivery_code, is_code_verified, estimated_time
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+            [
+              DEFAULT_DEMO_ORDER.id,
+              DEFAULT_DEMO_ORDER.orderNumber,
+              DEFAULT_DEMO_ORDER.customerName,
+              DEFAULT_DEMO_ORDER.customerAddress,
+              DEFAULT_DEMO_ORDER.restaurantName,
+              JSON.stringify(DEFAULT_DEMO_ORDER.items),
+              DEFAULT_DEMO_ORDER.totalAmount,
+              DEFAULT_DEMO_ORDER.status,
+              DEFAULT_DEMO_ORDER.deliveryType,
+              DEFAULT_DEMO_ORDER.deliveryCode,
+              DEFAULT_DEMO_ORDER.isCodeVerified,
+              DEFAULT_DEMO_ORDER.estimatedTime || "15-20 min",
+            ]
+          );
+        }
       }
       isDbInitialized = true;
       return true;
@@ -146,12 +153,13 @@ function mapRowToOrder(row: any): Order {
     deliveryType: (row.delivery_type as DeliveryType) || "DOMICILIO",
     deliveryCode: row.delivery_code,
     isCodeVerified: Boolean(row.is_code_verified),
+    estimatedTime: row.estimated_time || (row.delivery_type === "RITIRO" ? "10-20 min" : "15-25 min"),
     createdAt: new Date(row.created_at).toISOString(),
     updatedAt: new Date(row.updated_at).toISOString(),
   };
 }
 
-export async function getActiveOrder(): Promise<Order> {
+export async function getActiveOrder(): Promise<Order | null> {
   const p = getPool();
   if (p) {
     try {
@@ -162,6 +170,7 @@ export async function getActiveOrder(): Promise<Order> {
       if (res.rows.length > 0) {
         return mapRowToOrder(res.rows[0]);
       }
+      return null;
     } catch (err) {
       console.warn("Errore getActiveOrder su PostgreSQL, uso memory fallback:", err);
     }
@@ -171,19 +180,31 @@ export async function getActiveOrder(): Promise<Order> {
 
 export async function updateOrderStatus(
   orderId: string,
-  newStatus: OrderStatus
+  newStatus: OrderStatus,
+  estimatedTime?: string
 ): Promise<Order | null> {
   const p = getPool();
   if (p) {
     try {
       await initDatabase();
-      const res = await p.query(
-        `UPDATE orders 
-         SET status = $1, updated_at = CURRENT_TIMESTAMP 
-         WHERE id = $2 
-         RETURNING *`,
-        [newStatus, orderId]
-      );
+      let res;
+      if (estimatedTime) {
+        res = await p.query(
+          `UPDATE orders 
+           SET status = $1, estimated_time = $2, updated_at = CURRENT_TIMESTAMP 
+           WHERE id = $3 
+           RETURNING *`,
+          [newStatus, estimatedTime, orderId]
+        );
+      } else {
+        res = await p.query(
+          `UPDATE orders 
+           SET status = $1, updated_at = CURRENT_TIMESTAMP 
+           WHERE id = $2 
+           RETURNING *`,
+          [newStatus, orderId]
+        );
+      }
       if (res.rows.length > 0) {
         return mapRowToOrder(res.rows[0]);
       }
@@ -193,15 +214,34 @@ export async function updateOrderStatus(
   }
 
   // Fallback in-memory
-  if (memoryOrder.id === orderId || true) {
+  if (memoryOrder && (memoryOrder.id === orderId || true)) {
     memoryOrder = {
       ...memoryOrder,
       status: newStatus,
+      estimatedTime: estimatedTime || memoryOrder.estimatedTime,
       updatedAt: new Date().toISOString(),
     };
     return memoryOrder;
   }
   return null;
+}
+
+export async function deleteOrder(orderId?: string): Promise<boolean> {
+  const p = getPool();
+  if (p) {
+    try {
+      await initDatabase();
+      if (orderId) {
+        await p.query("DELETE FROM orders WHERE id = $1", [orderId]);
+      } else {
+        await p.query("DELETE FROM orders");
+      }
+    } catch (err) {
+      console.error("Errore cancellazione ordine da PostgreSQL:", err);
+    }
+  }
+  memoryOrder = null;
+  return true;
 }
 
 export async function verifyDeliveryCode(
@@ -210,6 +250,13 @@ export async function verifyDeliveryCode(
 ): Promise<{ success: boolean; order?: Order; error?: string }> {
   const cleanCode = inputCode.trim();
   const currentOrder = await getActiveOrder();
+
+  if (!currentOrder) {
+    return {
+      success: false,
+      error: "Nessun ordine attivo da verificare.",
+    };
+  }
 
   if (currentOrder.status !== "IN_CONSEGNA") {
     return {
@@ -245,14 +292,16 @@ export async function verifyDeliveryCode(
     }
   }
 
-  memoryOrder = {
-    ...memoryOrder,
-    status: "CONSEGNATO",
-    isCodeVerified: true,
-    updatedAt: new Date().toISOString(),
-  };
+  if (memoryOrder) {
+    memoryOrder = {
+      ...memoryOrder,
+      status: "CONSEGNATO",
+      isCodeVerified: true,
+      updatedAt: new Date().toISOString(),
+    };
+  }
 
-  return { success: true, order: memoryOrder };
+  return { success: true, order: memoryOrder || undefined };
 }
 
 export interface CreateOrderInput {
@@ -260,6 +309,7 @@ export interface CreateOrderInput {
   customerName?: string;
   customerAddress?: string;
   deliveryType?: DeliveryType;
+  estimatedTime?: string;
   items?: { id?: string; name: string; quantity: number; price: number }[];
 }
 
@@ -283,6 +333,10 @@ export async function createNewOrder(input?: CreateOrderInput): Promise<Order> {
   const deliveryType: DeliveryType =
     input?.deliveryType === "RITIRO" ? "RITIRO" : "DOMICILIO";
 
+  const estimatedTime =
+    input?.estimatedTime?.trim() ||
+    (deliveryType === "RITIRO" ? "10-20 min" : "15-25 min");
+
   const newOrder: Order = {
     id: "order-" + Date.now(),
     orderNumber: randomOrderNum,
@@ -295,6 +349,7 @@ export async function createNewOrder(input?: CreateOrderInput): Promise<Order> {
     deliveryType,
     deliveryCode: newCode,
     isCodeVerified: false,
+    estimatedTime,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -306,8 +361,8 @@ export async function createNewOrder(input?: CreateOrderInput): Promise<Order> {
       const res = await p.query(
         `INSERT INTO orders (
           id, order_number, customer_name, customer_address, restaurant_name,
-          items, total_amount, status, delivery_type, delivery_code, is_code_verified
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+          items, total_amount, status, delivery_type, delivery_code, is_code_verified, estimated_time
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         RETURNING *`,
         [
           newOrder.id,
@@ -321,6 +376,7 @@ export async function createNewOrder(input?: CreateOrderInput): Promise<Order> {
           newOrder.deliveryType,
           newOrder.deliveryCode,
           newOrder.isCodeVerified,
+          newOrder.estimatedTime,
         ]
       );
       if (res.rows.length > 0) {

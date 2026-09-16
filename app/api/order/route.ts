@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getActiveOrder, isDatabaseConfigured, createNewOrder } from "@/lib/db";
+import { getActiveOrder, isDatabaseConfigured, createNewOrder, deleteOrder } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -43,3 +43,22 @@ export async function POST(request: Request) {
     );
   }
 }
+
+export async function DELETE(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const orderId = searchParams.get("id") || undefined;
+    await deleteOrder(orderId);
+    return NextResponse.json({
+      success: true,
+      message: "Ordine cancellato con successo",
+    });
+  } catch (error) {
+    console.error("Errore API DELETE /api/order:", error);
+    return NextResponse.json(
+      { error: "Impossibile cancellare l'ordine" },
+      { status: 500 }
+    );
+  }
+}
+
