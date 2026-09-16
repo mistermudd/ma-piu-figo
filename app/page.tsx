@@ -21,6 +21,7 @@ import {
   Database,
   Flame,
 } from "lucide-react";
+import DeliveryMap from "@/components/DeliveryMap";
 
 export default function CustomerOrderPage() {
   const [order, setOrder] = useState<Order | null>(null);
@@ -338,6 +339,11 @@ export default function CustomerOrderPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* SEZIONE: MAPPA SIMULAZIONE PERCORSO GPS CON RIDER (SOLO IN CONSEGNA A DOMICILIO) */}
+      {order?.status === "IN_CONSEGNA" && !isPickup && (
+        <DeliveryMap order={order} />
       )}
 
       {/* SEZIONE: CODICE PER LA CONSEGNA */}

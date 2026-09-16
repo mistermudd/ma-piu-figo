@@ -15,10 +15,11 @@ const VALID_STATUSES: OrderStatus[] = [
 export async function PATCH(request: Request) {
   try {
     const body = await request.json();
-    const { orderId, status, estimatedTime } = body as {
+    const { orderId, status, estimatedTime, deliveryDuration } = body as {
       orderId: string;
       status: OrderStatus;
       estimatedTime?: string;
+      deliveryDuration?: number;
     };
 
     if (!orderId || !status) {
@@ -35,7 +36,12 @@ export async function PATCH(request: Request) {
       );
     }
 
-    const updatedOrder = await updateOrderStatus(orderId, status, estimatedTime);
+    const updatedOrder = await updateOrderStatus(
+      orderId,
+      status,
+      estimatedTime,
+      deliveryDuration
+    );
     if (!updatedOrder) {
       return NextResponse.json(
         { error: "Ordine non trovato" },

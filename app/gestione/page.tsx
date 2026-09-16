@@ -55,6 +55,7 @@ export default function ManagementDashboardPage() {
   const [customerAddress, setCustomerAddress] = useState("");
   const [deliveryType, setDeliveryType] = useState<"DOMICILIO" | "RITIRO">("DOMICILIO");
   const [estimatedTime, setEstimatedTime] = useState<string>("15-20 min");
+  const [deliveryDuration, setDeliveryDuration] = useState<number>(60);
   const [customTimeInput, setCustomTimeInput] = useState<string>("");
   const [isUpdatingTime, setIsUpdatingTime] = useState(false);
   const [timeUpdatedBanner, setTimeUpdatedBanner] = useState<string | null>(null);
@@ -83,6 +84,9 @@ export default function ManagementDashboardPage() {
         }
         if (data.order.estimatedTime) {
           setEstimatedTime(data.order.estimatedTime);
+        }
+        if (data.order.deliveryDuration) {
+          setDeliveryDuration(data.order.deliveryDuration);
         }
         if (data.order.items && data.order.items.length > 0) {
           setItems(data.order.items);
@@ -182,6 +186,7 @@ export default function ManagementDashboardPage() {
           customerAddress: finalAddress,
           deliveryType,
           estimatedTime,
+          deliveryDuration,
           items: validItems.map((it) => ({
             id: it.id,
             name: it.name.trim(),
@@ -274,14 +279,20 @@ export default function ManagementDashboardPage() {
     }
   };
 
-  // Aggiornamento stato ordine (con tempo stimato associato)
-  const updateStatus = async (newStatus: OrderStatus, customTime?: string) => {
+  // Aggiornamento stato ordine (con tempo stimato e durata consegna associati)
+  const updateStatus = async (
+    newStatus: OrderStatus,
+    customTime?: string,
+    customDeliveryDuration?: number
+  ) => {
     if (!order) return;
     setIsUpdating(true);
     setVerificationError(null);
     setVerificationSuccess(null);
 
     const timeToApply = customTime || estimatedTime;
+    const durationToApply =
+      customDeliveryDuration !== undefined ? customDeliveryDuration : deliveryDuration;
 
     try {
       const res = await fetch("/api/order/status", {
@@ -291,6 +302,7 @@ export default function ManagementDashboardPage() {
           orderId: order.id,
           status: newStatus,
           estimatedTime: timeToApply,
+          deliveryDuration: durationToApply,
         }),
       });
 
@@ -579,6 +591,58 @@ export default function ManagementDashboardPage() {
             </div>
           </div>
 
+          {/* Durata Simulazione Tragitto Consegna Mappa (per consegna a domicilio) */}
+          {deliveryType === "DOMICILIO" && (
+            <div>
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5 mb-1.5">
+                <Bike className="w-4 h-4 text-[#00CDBC]" />
+                Durata Viaggio Consegna Mappa GPS (Secondi)
+              </label>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative">
+                  <input
+                    type="number"
+                    min="10"
+                    max="600"
+                    value={deliveryDuration}
+                    onChange={(e) =>
+                      setDeliveryDuration(Math.max(10, parseInt(e.target.value) || 60))
+                    }
+                    className="w-28 px-3 py-2 text-sm rounded-xl border border-slate-300 focus:border-[#00CDBC] focus:ring-2 focus:ring-[#00CDBC]/20 outline-none transition-all font-semibold font-mono text-center"
+                  />
+                  <span className="absolute right-2.5 top-2.5 text-xs text-slate-400 font-bold">
+                    sec
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    { label: "30s (Veloce)", val: 30 },
+                    { label: "45s", val: 45 },
+                    { label: "60s (1 min)", val: 60 },
+                    { label: "90s (1.5 min)", val: 90 },
+                    { label: "120s (2 min)", val: 120 },
+                  ].map((preset) => (
+                    <button
+                      key={preset.val}
+                      type="button"
+                      onClick={() => setDeliveryDuration(preset.val)}
+                      className={`px-3 py-2 rounded-xl text-xs font-bold transition-all border ${
+                        deliveryDuration === preset.val
+                          ? "bg-[#00CDBC] text-white border-[#00CDBC] shadow-xs"
+                          : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <p className="text-[11px] text-slate-500 mt-1">
+                Tempo impiegato dal rider (con la tua foto) per percorrere la strada sulla mappa prima di arrivare.
+              </p>
+            </div>
+          )}
+
           {/* LISTA DINAMICA DEI PRODOTTI */}
           <div className="pt-3 border-t border-slate-100">
             <div className="flex items-center justify-between mb-3">
@@ -755,6 +819,80 @@ export default function ManagementDashboardPage() {
             2. Avanzamento Fasi Ordine
           </label>
 
+          {/* Configurazione Durata Consegna (per ordini con Consegna a Domicilio) */}
+          {(!order || order.deliveryType === "DOMICILIO") && (
+            <div className="mb-4 p-4 rounded-2xl bg-teal-50/80 border border-teal-200/80 shadow-2xs">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5 uppercase tracking-wider">
+                    <Bike className="w-4 h-4 text-[#00CDBC]" />
+                    Durata Simulazione Tragitto Rider su Mappa
+                  </label>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Definisci quanti secondi impiegherà il rider (con la tua foto) a percorrere la strada sulla mappa prima di arrivare.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {[
+                    { label: "30s", val: 30 },
+                    { label: "45s", val: 45 },
+                    { label: "60s (1m)", val: 60 },
+                    { label: "90s", val: 90 },
+                    { label: "120s (2m)", val: 120 },
+                  ].map((preset) => (
+                    <button
+                      key={preset.val}
+                      type="button"
+                      onClick={() => setDeliveryDuration(preset.val)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
+                        deliveryDuration === preset.val
+                          ? "bg-[#00CDBC] text-white border-[#00CDBC] shadow-xs scale-105"
+                          : "bg-white border-slate-200 text-slate-700 hover:bg-slate-100"
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+
+                  <div className="relative w-24">
+                    <input
+                      type="number"
+                      min="10"
+                      max="600"
+                      value={deliveryDuration}
+                      onChange={(e) =>
+                        setDeliveryDuration(Math.max(10, parseInt(e.target.value) || 60))
+                      }
+                      className="w-full px-2.5 py-1.5 text-xs text-center rounded-xl border border-slate-300 bg-white font-mono font-bold outline-none focus:border-[#00CDBC]"
+                    />
+                    <span className="absolute right-2 top-1.5 text-[10px] text-slate-400 font-bold">
+                      s
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {order?.status === "IN_CONSEGNA" && (
+                <div className="mt-3 pt-3 border-t border-teal-200/60 flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs text-[#007E7A] font-semibold flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                    Ordine in consegna (durata attiva: {order.deliveryDuration || deliveryDuration}s)
+                  </span>
+                  <button
+                    type="button"
+                    disabled={isUpdating}
+                    onClick={() => updateStatus("IN_CONSEGNA", undefined, deliveryDuration)}
+                    className="flex items-center gap-1.5 text-xs font-bold text-white bg-[#00CDBC] hover:bg-[#007E7A] px-3.5 py-1.5 rounded-xl shadow-xs transition-all active:scale-95 disabled:opacity-50"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Riavvia tragitto ({deliveryDuration}s)</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
             {/* 1. Pulsante "Ordine Accettato" */}
             <button
@@ -792,7 +930,7 @@ export default function ManagementDashboardPage() {
 
             {/* 3. Pulsante "Ordine in Consegna o Pronto per il Ritiro" */}
             <button
-              onClick={() => updateStatus("IN_CONSEGNA")}
+              onClick={() => updateStatus("IN_CONSEGNA", undefined, deliveryDuration)}
               disabled={isUpdating}
               className={`flex items-center justify-center gap-2.5 p-4 rounded-2xl font-bold text-sm transition-all active:scale-98 ${
                 order?.status === "IN_CONSEGNA"
@@ -808,7 +946,7 @@ export default function ManagementDashboardPage() {
               ) : (
                 <>
                   <Bike className="w-5 h-5" />
-                  <span>3. Metti in Consegna</span>
+                  <span>3. Metti in Consegna ({deliveryDuration}s)</span>
                 </>
               )}
             </button>

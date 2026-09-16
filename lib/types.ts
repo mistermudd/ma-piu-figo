@@ -27,6 +27,8 @@ export interface Order {
   deliveryCode: string;
   isCodeVerified: boolean;
   estimatedTime?: string;
+  deliveryDuration?: number;
+  deliveryStartedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
