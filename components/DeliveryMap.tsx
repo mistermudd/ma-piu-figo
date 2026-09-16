@@ -137,17 +137,17 @@ export default function DeliveryMap({ order }: DeliveryMapProps) {
     return getPositionAtProgress(ROUTE_POINTS, progress);
   }, [progress]);
 
-  // Formattazione tempo in minuti e secondi
+  // Formattazione tempo rigorosamente in minuti (nessun secondo visualizzato)
   const remainingSeconds = Math.max(0, Math.round(durationSeconds * (1 - progress)));
-  const formatRemainingTime = (totalSecs: number) => {
-    const mins = Math.floor(totalSecs / 60);
-    const secs = totalSecs % 60;
-    if (mins > 0) {
-      return `${mins} min ${secs > 0 ? `${secs}s` : ""}`.trim();
+  const formatRemainingMinutes = (totalSecs: number) => {
+    if (totalSecs <= 0) return "Arrivato!";
+    const mins = Math.ceil(totalSecs / 60);
+    if (mins <= 1) {
+      return "< 1 min";
     }
-    return `${secs}s`;
+    return `${mins} min`;
   };
-  const remainingTimeFormatted = progress >= 1 ? "Arrivato!" : formatRemainingTime(remainingSeconds);
+  const remainingTimeFormatted = progress >= 1 ? "Arrivato!" : formatRemainingMinutes(remainingSeconds);
 
   const remainingMeters = Math.max(0, Math.round(totalDistanceMeters * (1 - progress)));
   const percentComplete = Math.min(100, Math.round(progress * 100));

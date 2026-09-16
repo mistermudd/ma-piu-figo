@@ -110,6 +110,11 @@ export async function initDatabase(): Promise<boolean> {
 
       // Inserisce ordine demo solo la prima volta se il DB è completamente vuoto
       if (!isDbInitialized) {
+        // Migra eventuali vecchi valori in secondi memorizzati nel database Neon (> 30) convertendoli in minuti
+        await client.query(
+          "UPDATE orders SET delivery_duration = GREATEST(1, ROUND(delivery_duration / 60)) WHERE delivery_duration > 30"
+        );
+
         const countRes = await client.query("SELECT COUNT(*) FROM orders");
         if (parseInt(countRes.rows[0].count, 10) === 0 && memoryOrder) {
           await client.query(
@@ -130,7 +135,7 @@ export async function initDatabase(): Promise<boolean> {
               DEFAULT_DEMO_ORDER.deliveryCode,
               DEFAULT_DEMO_ORDER.isCodeVerified,
               DEFAULT_DEMO_ORDER.estimatedTime || "15-20 min",
-              DEFAULT_DEMO_ORDER.deliveryDuration || 60,
+              DEFAULT_DEMO_ORDER.deliveryDuration || 2,
             ]
           );
         }
@@ -149,6 +154,9 @@ export async function initDatabase(): Promise<boolean> {
 // Convertitore riga SQL in Oggetto TypeScript Order
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapRowToOrder(row: any): Order {
+  const rawDuration = row.delivery_duration ? Number(row.delivery_duration) : 2;
+  const safeMinutes = rawDuration > 30 ? Math.max(1, Math.round(rawDuration / 60)) : Math.max(1, rawDuration);
+
   return {
     id: row.id,
     orderNumber: row.order_number,
@@ -162,7 +170,7 @@ function mapRowToOrder(row: any): Order {
     deliveryCode: row.delivery_code,
     isCodeVerified: Boolean(row.is_code_verified),
     estimatedTime: row.estimated_time || (row.delivery_type === "RITIRO" ? "10-20 min" : "15-25 min"),
-    deliveryDuration: row.delivery_duration ? Number(row.delivery_duration) : 2,
+    deliveryDuration: safeMinutes,
     deliveryStartedAt: row.delivery_started_at ? new Date(row.delivery_started_at).toISOString() : undefined,
     createdAt: new Date(row.created_at).toISOString(),
     updatedAt: new Date(row.updated_at).toISOString(),
