@@ -45,7 +45,25 @@ Applicazione web full-stack per il tracciamento degli ordini in stile Deliveroo,
 
 ---
 
-## 🚀 Avvio del Progetto
+## 🚀 Deploy su Render (render.com)
+
+1. Accedi a [dashboard.render.com](https://dashboard.render.com).
+2. Clicca su **New + ➔ Web Service** (oppure **New + ➔ Blueprint**).
+3. Seleziona il repository GitHub `mistermudd/ma-piu-figo`.
+4. Imposta le seguenti configurazioni:
+   - **Environment**: `Node`
+   - **Region**: `Ohio (US East)` *(stessa regione di Neon us-east-2 per latenza minima!)*
+   - **Build Command**: `npm install && npm run build`
+   - **Start Command**: `npm run start`
+   - **Plan**: `Free`
+5. Nella sezione **Environment Variables**, aggiungi:
+   - `DATABASE_URL`: `postgresql://neondb_owner:npg_6kRgXI7JeEvp@ep-bold-lab-b4qsw46x-pooler.c-6.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require`
+   - `NODE_VERSION`: `20.18.0`
+6. Clicca su **Deploy Web Service**. Il tuo frontend Next.js sarà subito online e connesso al tuo database Neon!
+
+---
+
+## 💻 Avvio in Locale
 
 ### Modalità Sviluppo
 ```bash
