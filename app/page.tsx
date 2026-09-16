@@ -19,6 +19,7 @@ import {
   ShieldCheck,
   AlertCircle,
   Database,
+  Flame,
 } from "lucide-react";
 
 export default function CustomerOrderPage() {
@@ -99,6 +100,17 @@ export default function CustomerOrderPage() {
       case "ACCETTATO":
         return <CheckCircle2 {...iconProps} />;
       case "IN_PREPARAZIONE":
+        if (isCurrent) {
+          return (
+            <div className="w-full h-full rounded-xl sm:rounded-2xl overflow-hidden p-0.5">
+              <img
+                src="/chef.jpg"
+                alt="Chef al lavoro"
+                className="w-full h-full object-cover rounded-xl"
+              />
+            </div>
+          );
+        }
         return <ChefHat {...iconProps} />;
       case "IN_CONSEGNA":
         return isPickup ? <ShoppingBag {...iconProps} /> : <Bike {...iconProps} />;
@@ -239,6 +251,43 @@ export default function CustomerOrderPage() {
           </div>
         </div>
       </div>
+
+      {/* CARD SPECIALE CUOCO IN PREPARAZIONE */}
+      {order?.status === "IN_PREPARAZIONE" && (
+        <div className="bg-gradient-to-br from-amber-500 via-orange-500 to-rose-600 text-white rounded-3xl p-6 sm:p-8 shadow-xl relative overflow-hidden animate-pulse-slow border-2 border-amber-300/40">
+          <div className="absolute top-0 right-0 -mr-10 -mt-10 w-48 h-48 bg-white/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="relative z-10 flex flex-col sm:flex-row items-center gap-6">
+            {/* Foto del Cuoco con cornice e badge */}
+            <div className="relative shrink-0 group">
+              <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-full overflow-hidden border-4 border-white shadow-2xl ring-4 ring-amber-300/40 bg-slate-900 transition-transform duration-300 group-hover:scale-105">
+                <img
+                  src="/chef.jpg"
+                  alt="Il nostro Chef in cucina"
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <div className="absolute -bottom-2.5 left-1/2 -translate-x-1/2 bg-white text-slate-900 text-xs font-black px-3 py-1 rounded-full shadow-lg flex items-center gap-1 border border-amber-200 whitespace-nowrap">
+                <span>👨‍🍳</span>
+                <span className="text-[#007E7A]">Chef Matteo</span>
+              </div>
+            </div>
+
+            {/* Testo informativo sulla preparazione */}
+            <div className="text-center sm:text-left space-y-2 flex-1">
+              <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-md px-3.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider text-white">
+                <Flame className="w-4 h-4 text-yellow-300 fill-yellow-300 animate-bounce" />
+                Ai fornelli ora • Cucina in azione
+              </div>
+              <h3 className="text-xl sm:text-2xl font-black text-white leading-snug">
+                Lo Chef sta creando il tuo ordine con passione!
+              </h3>
+              <p className="text-amber-100 text-xs sm:text-sm max-w-xl">
+                I tuoi piatti sono in preparazione in cucina con ingredienti freschissimi. Lo Chef cura ogni dettaglio per garantirti un pasto speciale.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* SEZIONE: CODICE PER LA CONSEGNA */}
       <div className="bg-white border border-slate-200/80 rounded-3xl p-6 sm:p-8 shadow-sm">

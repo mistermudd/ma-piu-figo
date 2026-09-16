@@ -24,6 +24,7 @@ import {
   MapPin,
   User,
   ShoppingBag,
+  Flame,
 } from "lucide-react";
 
 interface EditableItem {
@@ -631,7 +632,13 @@ export default function ManagementDashboardPage() {
                   : "bg-slate-50 hover:bg-purple-50 text-slate-800 hover:text-purple-700 border border-slate-200 hover:border-purple-300"
               }`}
             >
-              <ChefHat className="w-5 h-5" />
+              {order?.status === "IN_PREPARAZIONE" ? (
+                <div className="w-6 h-6 rounded-full overflow-hidden border border-white shrink-0">
+                  <img src="/chef.jpg" alt="Chef" className="w-full h-full object-cover" />
+                </div>
+              ) : (
+                <ChefHat className="w-5 h-5" />
+              )}
               <span>2. In Preparazione</span>
             </button>
 
@@ -660,6 +667,40 @@ export default function ManagementDashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* CARD CHEF IN PREPARAZIONE NELLA DASHBOARD GESTIONE */}
+      {order?.status === "IN_PREPARAZIONE" && (
+        <div className="bg-gradient-to-br from-purple-950 via-slate-900 to-indigo-950 text-white border-2 border-purple-500/40 rounded-3xl p-6 sm:p-8 shadow-xl relative overflow-hidden">
+          <div className="absolute -right-10 -top-10 w-48 h-48 bg-purple-500/15 rounded-full blur-3xl pointer-events-none" />
+          <div className="relative z-10 flex flex-col sm:flex-row items-center gap-6">
+            <div className="relative shrink-0">
+              <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full overflow-hidden border-4 border-purple-400 shadow-2xl ring-4 ring-purple-400/20 bg-slate-900">
+                <img
+                  src="/chef.jpg"
+                  alt="Chef Matteo"
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <div className="absolute -bottom-2.5 left-1/2 -translate-x-1/2 bg-purple-600 text-white text-[11px] font-black px-3 py-0.5 rounded-full shadow border border-purple-300 whitespace-nowrap flex items-center gap-1">
+                <span>👨‍🍳</span> Chef Matteo
+              </div>
+            </div>
+
+            <div className="text-center sm:text-left space-y-2 flex-1">
+              <div className="inline-flex items-center gap-2 bg-purple-500/20 border border-purple-400/30 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider text-purple-200">
+                <Flame className="w-3.5 h-3.5 text-amber-400 fill-amber-400 animate-bounce" />
+                Cucina in Preparazione
+              </div>
+              <h3 className="text-xl sm:text-2xl font-black text-white">
+                Chef Matteo è ai fornelli per l'ordine #{order.orderNumber}
+              </h3>
+              <p className="text-purple-200/90 text-xs sm:text-sm max-w-xl">
+                I piatti per <strong>{order.customerName}</strong> ({order.items.length} prodotti) sono attualmente in lavorazione in cucina. Quando pronti, clicca su <em>"{order.deliveryType === 'RITIRO' ? 'Pronto per il Ritiro' : 'Metti in Consegna'}"</em> per generare il codice di verifica.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* SEZIONE 3: INPUT BOX VERIFICA CODICE DI CONSEGNA O RITIRO */}
       {order?.status === "IN_CONSEGNA" ? (
