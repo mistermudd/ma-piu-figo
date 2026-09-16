@@ -341,8 +341,8 @@ export default function CustomerOrderPage() {
         </div>
       )}
 
-      {/* SEZIONE: MAPPA SIMULAZIONE PERCORSO GPS CON RIDER (SOLO IN CONSEGNA A DOMICILIO) */}
-      {order?.status === "IN_CONSEGNA" && !isPickup && (
+      {/* SEZIONE: MAPPA SIMULAZIONE PERCORSO GPS CON RIDER */}
+      {order?.status === "IN_CONSEGNA" && (
         <DeliveryMap order={order} />
       )}
 

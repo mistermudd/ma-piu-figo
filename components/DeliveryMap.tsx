@@ -46,12 +46,12 @@ function getPathLength(points: Point[]): number {
   return total;
 }
 
-// Interpola la posizione e l'angolo (heading) lungo il tracciato per una percentuale (0..1)
+// Interpola la posizione lungo il tracciato per una percentuale (0..1)
 function getPositionAtProgress(
   points: Point[],
   progress: number
-): { x: number; y: number; angle: number } {
-  const clamped = Math.max(0, Math.min(1, progress));
+): { x: number; y: number } {
+  const clamped = Math.max(0, Math.min(1, isNaN(progress) ? 0 : progress));
   const totalLength = getPathLength(points);
   const targetDistance = clamped * totalLength;
 
@@ -65,81 +65,83 @@ function getPositionAtProgress(
 
     if (accumulated + segmentLength >= targetDistance || i === points.length - 1) {
       const remainingDist = targetDistance - accumulated;
-      const t = segmentLength === 0 ? 0 : Math.min(1, remainingDist / segmentLength);
-      const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+      const t = segmentLength === 0 ? 0 : Math.min(1, Math.max(0, remainingDist / segmentLength));
       return {
         x: p0.x + dx * t,
         y: p0.y + dy * t,
-        angle,
       };
     }
     accumulated += segmentLength;
   }
 
   const last = points[points.length - 1];
-  return { x: last.x, y: last.y, angle: 0 };
+  return { x: last.x, y: last.y };
 }
 
 export default function DeliveryMap({ order }: DeliveryMapProps) {
   // Durata configurata (in secondi)
   const durationSeconds = Math.max(10, order.deliveryDuration || 60);
-  const totalDistanceMeters = 1850; // Distanza fittizia realistica
+  const totalDistanceMeters = 1850;
 
   // Stato progresso 0..1
   const [progress, setProgress] = useState(0);
-  const [isManualReplay, setIsManualReplay] = useState(false);
-  const manualStartTimeRef = useRef<number | null>(null);
+  const startTimeRef = useRef<number>(Date.now());
+  const animFrameRef = useRef<number | null>(null);
 
-  // Calcola il progresso basandosi sull'ora reale d'inizio salvata nel DB Neon
+  // Inizializzazione e animazione continua fluida a 60 FPS
   useEffect(() => {
-    if (isManualReplay) return;
-
-    const calculateInitialProgress = () => {
-      if (!order.deliveryStartedAt) {
-        return 0.1; // Se non c'è timestamp preciso, parte dall'inizio
-      }
+    let initialElapsed = 0;
+    if (order.deliveryStartedAt) {
       const startedAt = new Date(order.deliveryStartedAt).getTime();
-      const now = Date.now();
-      const elapsed = (now - startedAt) / 1000;
-      return Math.min(1, Math.max(0, elapsed / durationSeconds));
-    };
-
-    setProgress(calculateInitialProgress());
-
-    const interval = setInterval(() => {
-      if (!isManualReplay) {
-        setProgress(calculateInitialProgress());
+      if (!isNaN(startedAt)) {
+        const diff = (Date.now() - startedAt) / 1000;
+        if (diff > 0 && diff < durationSeconds) {
+          initialElapsed = diff;
+        }
       }
-    }, 500);
+    }
 
-    return () => clearInterval(interval);
-  }, [order.deliveryStartedAt, durationSeconds, isManualReplay]);
+    // Se appena entrato o timestamp non trovato, parte da zero
+    startTimeRef.current = Date.now() - initialElapsed * 1000;
 
-  // Gestione animazione fluida manuale (quando l'utente clicca "Riavvia Simulazione")
-  useEffect(() => {
-    if (!isManualReplay) return;
+    const animate = () => {
+      const elapsed = (Date.now() - startTimeRef.current) / 1000;
+      const currentProgress = Math.min(1, Math.max(0, elapsed / durationSeconds));
+      setProgress(currentProgress);
 
-    let animFrame: number;
-    const startTime = Date.now();
-    manualStartTimeRef.current = startTime;
-
-    const tick = () => {
-      const elapsed = (Date.now() - startTime) / 1000;
-      const p = Math.min(1, elapsed / durationSeconds);
-      setProgress(p);
-
-      if (p < 1) {
-        animFrame = requestAnimationFrame(tick);
-      } else {
-        setIsManualReplay(false);
+      if (currentProgress < 1) {
+        animFrameRef.current = requestAnimationFrame(animate);
       }
     };
 
-    animFrame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(animFrame);
-  }, [isManualReplay, durationSeconds]);
+    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    animFrameRef.current = requestAnimationFrame(animate);
 
-  // Posizione corrente del rider
+    return () => {
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    };
+  }, [order.deliveryStartedAt, order.id, durationSeconds]);
+
+  // Riavvio manuale della corsa
+  const handleRestartSimulation = () => {
+    startTimeRef.current = Date.now();
+    setProgress(0);
+
+    const animate = () => {
+      const elapsed = (Date.now() - startTimeRef.current) / 1000;
+      const currentProgress = Math.min(1, Math.max(0, elapsed / durationSeconds));
+      setProgress(currentProgress);
+
+      if (currentProgress < 1) {
+        animFrameRef.current = requestAnimationFrame(animate);
+      }
+    };
+
+    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    animFrameRef.current = requestAnimationFrame(animate);
+  };
+
+  // Posizione corrente del rider interpolata
   const riderPos = useMemo(() => {
     return getPositionAtProgress(ROUTE_POINTS, progress);
   }, [progress]);
@@ -163,18 +165,15 @@ export default function DeliveryMap({ order }: DeliveryMapProps) {
     return "🥡 Ordine ritirato, il rider ha iniziato la consegna";
   }, [progress]);
 
-  const handleRestartSimulation = () => {
-    setIsManualReplay(true);
-    setProgress(0);
-  };
-
-  // Costruzione stringa del tracciato SVG per il path
+  // Costruzione stringa del tracciato SVG
   const svgPathD = useMemo(() => {
     return ROUTE_POINTS.map((pt, idx) => `${idx === 0 ? "M" : "L"} ${pt.x} ${pt.y}`).join(" ");
   }, []);
 
+  const totalLength = useMemo(() => getPathLength(ROUTE_POINTS), []);
+
   return (
-    <div className="bg-white border-2 border-[#00CDBC]/40 rounded-3xl overflow-hidden shadow-lg transition-all">
+    <div className="bg-white border-2 border-[#00CDBC] rounded-3xl overflow-hidden shadow-xl transition-all">
       {/* Intestazione Mappa */}
       <div className="p-5 sm:p-6 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -189,7 +188,7 @@ export default function DeliveryMap({ order }: DeliveryMapProps) {
           </div>
 
           <h3 className="text-lg sm:text-xl font-black text-white mt-1.5 flex items-center gap-2">
-            <Navigation className="w-5 h-5 text-[#00CDBC]" />
+            <Navigation className="w-5 h-5 text-[#00CDBC] animate-pulse" />
             <span>Tracciamento Consegna Rider in Tempo Reale</span>
           </h3>
           <p className="text-xs sm:text-sm text-slate-300 mt-0.5">
@@ -201,10 +200,10 @@ export default function DeliveryMap({ order }: DeliveryMapProps) {
         <div className="flex items-center gap-3">
           <button
             onClick={handleRestartSimulation}
-            className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 active:scale-95 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-all border border-white/10 shadow-sm"
-            title="Riavvia la simulazione dall'inizio"
+            className="flex items-center gap-1.5 bg-[#00CDBC]/20 hover:bg-[#00CDBC]/30 active:scale-95 text-teal-200 hover:text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-all border border-[#00CDBC]/40 shadow-sm"
+            title="Riavvia la simulazione del percorso dall'inizio"
           >
-            <RotateCcw className={`w-3.5 h-3.5 ${isManualReplay ? "animate-spin" : ""}`} />
+            <RotateCcw className="w-3.5 h-3.5" />
             <span>Riavvia Simulazione ({durationSeconds}s)</span>
           </button>
         </div>
@@ -241,7 +240,7 @@ export default function DeliveryMap({ order }: DeliveryMapProps) {
 
         <div>
           <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
-            Stato Tragitto
+            Avanzamento
           </span>
           <span className="text-base sm:text-lg font-black text-slate-900 font-mono">
             {percentComplete}%
@@ -249,29 +248,21 @@ export default function DeliveryMap({ order }: DeliveryMapProps) {
         </div>
       </div>
 
-      {/* Vista Mappa Grafica Interattiva (SVG Urbano Ad Alta Fedeltà) */}
-      <div className="relative w-full aspect-[16/9] sm:aspect-[21/10] bg-[#e8ecf1] overflow-hidden select-none">
+      {/* Vista Mappa Grafica Interattiva (SVG Urbano Ad Alta Fedeltà con Overlay HTML per il Rider) */}
+      <div className="relative w-full aspect-[16/9] sm:aspect-[21/10] bg-[#f1f4f8] overflow-hidden select-none">
         <svg
           viewBox="0 0 900 480"
           className="w-full h-full object-cover"
           xmlns="http://www.w3.org/2000/svg"
         >
           <defs>
-            {/* Pattern Fiume con onde */}
             <linearGradient id="riverGradient" x1="0%" y1="0%" x2="100%" y2="100%">
               <stop offset="0%" stopColor="#93c5fd" />
               <stop offset="100%" stopColor="#60a5fa" />
             </linearGradient>
 
-            {/* Gradiente Tracciato Completato */}
-            <linearGradient id="routeProgressGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#00CDBC" />
-              <stop offset="100%" stopColor="#008078" />
-            </linearGradient>
-
-            {/* Filtro Ombra per i Marker */}
             <filter id="markerShadow" x="-20%" y="-20%" width="150%" height="150%">
-              <feDropShadow dx="0" dy="4" stdDeviation="4" floodOpacity="0.3" />
+              <feDropShadow dx="0" dy="4" stdDeviation="4" floodOpacity="0.25" />
             </filter>
           </defs>
 
@@ -310,14 +301,12 @@ export default function DeliveryMap({ order }: DeliveryMapProps) {
           <rect x="690" y="300" width="170" height="50" fill="#e2e7ec" rx="8" />
           <rect x="690" y="390" width="170" height="50" fill="#e2e7ec" rx="8" />
 
-          {/* RETE STRADALE (Grigia Chiara) */}
-          {/* Strade Orizzontali */}
+          {/* RETE STRADALE (Bianca) */}
           <line x1="0" y1="110" x2="900" y2="110" stroke="#ffffff" strokeWidth="24" strokeLinecap="round" />
           <line x1="0" y1="190" x2="900" y2="190" stroke="#ffffff" strokeWidth="26" strokeLinecap="round" />
           <line x1="0" y1="280" x2="900" y2="280" stroke="#ffffff" strokeWidth="24" strokeLinecap="round" />
           <line x1="0" y1="370" x2="900" y2="370" stroke="#ffffff" strokeWidth="24" strokeLinecap="round" />
 
-          {/* Strade Verticali */}
           <line x1="260" y1="0" x2="260" y2="480" stroke="#ffffff" strokeWidth="24" strokeLinecap="round" />
           <line x1="490" y1="0" x2="490" y2="480" stroke="#ffffff" strokeWidth="26" strokeLinecap="round" />
           <line x1="670" y1="0" x2="670" y2="480" stroke="#ffffff" strokeWidth="24" strokeLinecap="round" />
@@ -333,7 +322,7 @@ export default function DeliveryMap({ order }: DeliveryMapProps) {
           <text x="254" y="240" fill="#94a3b8" fontSize="10" fontWeight="bold" transform="rotate(-90 254,240)">Viale dei Mille</text>
           <text x="664" y="240" fill="#94a3b8" fontSize="10" fontWeight="bold" transform="rotate(-90 664,240)">Via Roma</text>
 
-          {/* TRACCIATO GPS PERCORSO (Intera linea tratteggiata) */}
+          {/* TRACCIATO GPS PERCORSO (Linea tratteggiata) */}
           <path
             d={svgPathD}
             fill="none"
@@ -342,154 +331,146 @@ export default function DeliveryMap({ order }: DeliveryMapProps) {
             strokeDasharray="8 6"
             strokeLinecap="round"
             strokeLinejoin="round"
-            opacity="0.35"
+            opacity="0.3"
           />
 
-          {/* LINEA PERCORSA DAL RIDER (Solida e luminosa) */}
+          {/* LINEA PERCORSA DAL RIDER (Tratto completato continuo luminoso) */}
           <path
             d={svgPathD}
             fill="none"
-            stroke="url(#routeProgressGrad)"
+            stroke="#00CDBC"
             strokeWidth="8"
             strokeLinecap="round"
             strokeLinejoin="round"
-            strokeDasharray={`${getPathLength(ROUTE_POINTS) * progress} ${getPathLength(ROUTE_POINTS)}`}
+            strokeDasharray={`${totalLength * progress} ${totalLength}`}
           />
 
           {/* PUNTO DI PARTENZA: RISTORANTE (120, 110) */}
           <g transform="translate(120, 110)" filter="url(#markerShadow)">
-            <circle r="22" fill="#00CDBC" fillOpacity="0.2" className="animate-ping" />
-            <circle r="18" fill="#ffffff" stroke="#007E7A" strokeWidth="3" />
-            <circle r="13" fill="#007E7A" />
-            <g transform="translate(-8, -8) scale(0.7)">
-              <Building2 className="w-6 h-6 text-white" />
-            </g>
-
-            {/* Badge Ristorante */}
-            <g transform="translate(0, -28)">
-              <rect x="-60" y="-12" width="120" height="20" rx="10" fill="#0f172a" opacity="0.9" />
-              <text x="0" y="2" fill="#ffffff" fontSize="9" fontWeight="bold" textAnchor="middle">
-                🏪 {order.restaurantName.length > 18 ? order.restaurantName.slice(0, 16) + "..." : order.restaurantName}
-              </text>
-            </g>
-          </g>
-
-          {/* PUNTO DI DESTINAZIONE: CLIENTE (780, 370) */}
-          <g transform="translate(780, 370)" filter="url(#markerShadow)">
-            <circle r="24" fill="#f43f5e" fillOpacity="0.25" className="animate-ping" />
-            <circle r="18" fill="#ffffff" stroke="#e11d48" strokeWidth="3" />
-            <circle r="13" fill="#e11d48" />
-            <g transform="translate(-8, -8) scale(0.7)">
-              <Home className="w-6 h-6 text-white" />
-            </g>
-
-            {/* Badge Destinazione */}
-            <g transform="translate(0, -28)">
-              <rect x="-65" y="-12" width="130" height="20" rx="10" fill="#0f172a" opacity="0.9" />
-              <text x="0" y="2" fill="#ffffff" fontSize="9" fontWeight="bold" textAnchor="middle">
-                🏠 Casa di {order.customerName}
-              </text>
-            </g>
-          </g>
-
-          {/* MARKER DEL RIDER CON LA FACCIA FORNITA DALL'UTENTE (/chef.jpg) */}
-          <g
-            transform={`translate(${riderPos.x}, ${riderPos.y})`}
-            filter="url(#markerShadow)"
-            className="transition-all duration-300 ease-out"
-          >
-            {/* Onde radar pulsanti attorno al rider */}
-            <circle r="34" fill="#00CDBC" fillOpacity="0.25" className="animate-ping" />
-            <circle r="28" fill="#00CDBC" fillOpacity="0.4" />
-
-            {/* Cornice circolare avatar */}
-            <circle r="23" fill="#ffffff" stroke="#00CDBC" strokeWidth="4" />
-
-            {/* Foto del Rider/Chef (public/chef.jpg) con clipPath rotondo */}
-            <clipPath id="riderAvatarClip">
-              <circle r="20" cx="0" cy="0" />
-            </clipPath>
-
-            <image
-              href="/chef.jpg"
-              x="-20"
-              y="-20"
-              width="40"
-              height="40"
-              clipPath="url(#riderAvatarClip)"
-              preserveAspectRatio="xMidYMid slice"
-            />
-
-            {/* Badge Scooter 🛵 attaccato all'avatar */}
-            <g transform="translate(10, 10)">
-              <circle r="9" fill="#0f172a" stroke="#ffffff" strokeWidth="1.5" />
-              <text x="0" y="3.5" fontSize="10" textAnchor="middle">
-                🛵
-              </text>
-            </g>
-
-            {/* Etichetta fluttuante Rider Matteo */}
-            <g transform="translate(0, -32)">
+            <circle r="18" fill="#0f172a" stroke="#ffffff" strokeWidth="3" />
+            <text x="0" y="5" fontSize="14" textAnchor="middle">
+              🍕
+            </text>
+            <g transform="translate(0, 30)">
               <rect
-                x="-55"
-                y="-11"
-                width="110"
-                height="19"
-                rx="9"
-                fill="#00CDBC"
-                stroke="#ffffff"
-                strokeWidth="1.5"
-                filter="url(#markerShadow)"
+                x="-65"
+                y="-10"
+                width="130"
+                height="20"
+                rx="10"
+                fill="#0f172a"
+                stroke="#334155"
+                strokeWidth="1"
               />
               <text
                 x="0"
-                y="2.5"
-                fill="#0f172a"
-                fontSize="9"
-                fontWeight="900"
+                y="3.5"
+                fill="#ffffff"
+                fontSize="9.5"
+                fontWeight="bold"
                 textAnchor="middle"
-                letterSpacing="0.2"
               >
-                Rider Matteo • {progress >= 1 ? "Arrivato" : `${remainingSeconds}s`}
+                {order.restaurantName || "Ristorante"}
+              </text>
+            </g>
+          </g>
+
+          {/* PUNTO DI DESTINAZIONE: ABITAZIONE CLIENTE (780, 370) */}
+          <g transform="translate(780, 370)" filter="url(#markerShadow)">
+            <circle r="22" fill="#ef4444" fillOpacity="0.2" className="animate-ping" />
+            <circle r="18" fill="#ef4444" stroke="#ffffff" strokeWidth="3" />
+            <text x="0" y="5" fontSize="14" textAnchor="middle">
+              🏡
+            </text>
+            <g transform="translate(0, 30)">
+              <rect
+                x="-65"
+                y="-10"
+                width="130"
+                height="20"
+                rx="10"
+                fill="#ef4444"
+                stroke="#fca5a5"
+                strokeWidth="1"
+              />
+              <text
+                x="0"
+                y="3.5"
+                fill="#ffffff"
+                fontSize="9.5"
+                fontWeight="bold"
+                textAnchor="middle"
+              >
+                Casa di {order.customerName || "Cliente"}
               </text>
             </g>
           </g>
         </svg>
 
-        {/* Overlay Mini Bussola & Notifica Rapida in Basso */}
-        <div className="absolute bottom-3 left-3 bg-slate-900/85 backdrop-blur-md text-white px-3.5 py-1.5 rounded-full text-xs font-semibold flex items-center gap-2 border border-slate-700 shadow-md">
-          <Compass className="w-3.5 h-3.5 text-[#00CDBC]" />
-          <span>Direzione: {order.customerAddress || "Destinazione cliente"}</span>
+        {/* MARKER DEL RIDER ANIMATO CON LA FOTO DELL'UTENTE (HTML Overlay - 100% visibile e senza bug di rendering) */}
+        <div
+          className="absolute z-20 pointer-events-none transition-transform duration-75 ease-linear"
+          style={{
+            left: `${(riderPos.x / 900) * 100}%`,
+            top: `${(riderPos.y / 480) * 100}%`,
+            transform: "translate(-50%, -50%)",
+          }}
+        >
+          {/* Onde radar pulsanti */}
+          <div className="absolute -inset-3 rounded-full bg-[#00CDBC]/30 animate-ping pointer-events-none" />
+          <div className="absolute -inset-1.5 rounded-full bg-[#00CDBC]/40 animate-pulse pointer-events-none" />
+
+          {/* Cornice rotonda con la foto del cuoco/rider */}
+          <div className="relative w-12 h-12 sm:w-14 sm:h-14 rounded-full overflow-hidden border-3 border-white shadow-2xl ring-3 ring-[#00CDBC] bg-slate-900">
+            <img
+              src="/chef.jpg"
+              alt="Rider Matteo"
+              className="w-full h-full object-cover"
+            />
+          </div>
+
+          {/* Mini Badge Scooter 🛵 */}
+          <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-slate-900 rounded-full border-2 border-white flex items-center justify-center text-xs shadow-md">
+            🛵
+          </div>
+
+          {/* Etichetta fluttuante Rider Matteo */}
+          <div className="absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap bg-[#00CDBC] text-slate-950 text-[10px] sm:text-xs font-black px-2.5 py-0.5 rounded-full shadow-lg border border-white">
+            Rider Matteo • {progress >= 1 ? "Arrivato!" : `${remainingSeconds}s`}
+          </div>
         </div>
 
+        {/* Overlay Mini Bussola in basso a sinistra */}
+        <div className="absolute bottom-3 left-3 bg-slate-900/85 backdrop-blur-md text-white px-3.5 py-1.5 rounded-full text-xs font-semibold flex items-center gap-2 border border-slate-700 shadow-md z-10">
+          <Compass className="w-3.5 h-3.5 text-[#00CDBC]" />
+          <span>Destinazione: {order.customerAddress || "Indirizzo cliente"}</span>
+        </div>
+
+        {/* Notifica flottante quando il rider è arrivato */}
         {progress >= 1 && (
-          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
-            <div className="bg-white rounded-3xl p-6 text-center max-w-sm shadow-2xl border-2 border-emerald-400">
-              <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-3 shadow-inner">
-                <CheckCircle2 className="w-8 h-8 animate-bounce" />
-              </div>
-              <h4 className="text-lg font-black text-slate-900">
-                Il rider è arrivato al tuo indirizzo!
-              </h4>
-              <p className="text-xs text-slate-600 mt-1">
-                Matteo è arrivato con il tuo ordine. Mostragli il tuo PIN di sicurezza a 4 cifre per ricevere la consegna.
-              </p>
-              <button
-                onClick={handleRestartSimulation}
-                className="mt-4 inline-flex items-center gap-1.5 text-xs font-bold text-[#007E7A] bg-teal-50 hover:bg-teal-100 px-4 py-2 rounded-xl transition-all"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                Rivedi percorso animato
-              </button>
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-white/95 backdrop-blur-md rounded-2xl px-5 py-3.5 shadow-2xl border-2 border-emerald-400 text-center max-w-sm z-30 animate-fadeIn">
+            <div className="flex items-center justify-center gap-2 text-emerald-600 font-black text-sm">
+              <CheckCircle2 className="w-5 h-5 animate-bounce" />
+              <span>Il rider è arrivato al tuo indirizzo!</span>
             </div>
+            <p className="text-[11px] text-slate-600 mt-1">
+              Matteo è qui! Mostragli il PIN di sicurezza a 4 cifre per ricevere il tuo ordine.
+            </p>
+            <button
+              onClick={handleRestartSimulation}
+              className="mt-2.5 inline-flex items-center gap-1.5 text-xs font-bold text-[#007E7A] bg-teal-50 hover:bg-teal-100 px-3.5 py-1.5 rounded-xl transition-all shadow-xs"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Rivedi percorso animato</span>
+            </button>
           </div>
         )}
       </div>
 
-      {/* Barra di avanzamento del viaggio */}
+      {/* Barra di avanzamento del viaggio in fondo alla card */}
       <div className="p-4 bg-slate-900 text-white flex items-center justify-between gap-4">
         <div className="flex items-center gap-3 flex-1">
-          <div className="w-8 h-8 rounded-full overflow-hidden border border-teal-400 shrink-0">
+          <div className="w-9 h-9 rounded-full overflow-hidden border-2 border-teal-400 shrink-0">
             <img src="/chef.jpg" alt="Matteo Rider" className="w-full h-full object-cover" />
           </div>
           <div className="flex-1">
@@ -497,9 +478,9 @@ export default function DeliveryMap({ order }: DeliveryMapProps) {
               <span className="text-teal-300">Avanzamento consegna su strada</span>
               <span className="text-white font-mono">{percentComplete}%</span>
             </div>
-            <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+            <div className="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden">
               <div
-                className="h-full bg-gradient-to-r from-[#00CDBC] to-emerald-400 transition-all duration-300 rounded-full"
+                className="h-full bg-gradient-to-r from-[#00CDBC] to-emerald-400 transition-all duration-100 rounded-full"
                 style={{ width: `${percentComplete}%` }}
               />
             </div>
